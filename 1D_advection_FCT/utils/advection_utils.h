@@ -2,6 +2,9 @@
  * Basic utilities
  */
 
+#ifndef _ADVECTION_UTILS
+#define _ADVECTION_UTILS
+
 #include <math.h>
 #include <vector>
 
@@ -44,7 +47,8 @@ struct InitState {
   std::vector<double> u;
 };
 
-InitState::InitState(const int ndx) : ndx(ndx), time(0.0), px(ndx, 0.0), u(ndx, 0.0) {}
+InitState::InitState(const int ndx)
+    : ndx(ndx), time(0.0), px(ndx, 0.0), u(ndx, 0.0) {}
 
 void sine_init(InitState &state, const ProblemConfig &config,
                const double time) {
@@ -84,9 +88,11 @@ struct ProblemConfig parse_args(int argc, char *argv[]) {
 }
 
 void check_bounds(const ProblemConfig &config) {
-    if(config.ndx <=0){
-        printf("NDX <= 0, cannot run computation\n");
-        exit(1);
-    }
+  if (config.ndx <= 0) {
+    printf("NDX <= 0, cannot run computation\n");
+    exit(1);
+  }
 }
 } // namespace FCT_initialization
+
+#endif
