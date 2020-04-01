@@ -28,12 +28,12 @@ int main(int argc, char *argv[]) {
 
   Kokkos::initialize(argc, argv);
   {
-    // Allocate y, x vectors and Matrix A:
-    double *const u_state = new double[ndx + 2 * 2];
-    double *const flux_low = new double[ndx + 1];
-    double *const flux_high = new double[ndx + 1];
-    double *const adiff_flux = new double[ndx + 1];
-    double *const flux_c = new double[ndx + 1];
+    // Allocate y, x vectors and Matrix A
+    Kokkos::View<double *> u_state("u_state", ndx + 2 * 2);
+    Kokkos::View<double *> flux_low("flux_low", ndx + 1);
+    Kokkos::View<double *> flux_high("flux_high", ndx + 1);
+    Kokkos::View<double *> adiff_flux("adiff_flux", ndx + 1);
+    Kokkos::View<double *> flux_c("flux_c", ndx + 1);
 
     // Initialize U
     for (int i = 0; i < ndx; ++i) {
@@ -49,66 +49,60 @@ int main(int argc, char *argv[]) {
       const double dxdt = (init.dx / config.dt);
 
       // Set BCs
-      u_state[0] = u_state[ndx + 1];
-      u_state[1] = u_state[ndx + 2];
-      u_state[ndx + 3] = u_state[2];
-      u_state[ndx + 4] = u_state[3];
+      u_state( 0 ) = u_state(ndx + 1);
+      u_state( 1 ) = u_state(ndx + 2);
+      u_state(ndx + 3) = u_state(2);
+      u_state(ndx + 4) = u_state(3);
 
       // Compute fluxes
       Kokkos::parallel_for("calc_low_flux", ndx + 1, KOKKOS_LAMBDA(int i) {
-        flux_low[i] = config.a * u_state[i + 1];
+        flux_low(i) = config.a * u_state(i + 1);
       });
 
       // Compute high order flux
       const double sigma_i = (config.a * config.dt / init.dx);
       Kokkos::parallel_for("calc_high_flux", ndx + 1, KOKKOS_LAMBDA(int i) {
-        flux_high[i] =
+        flux_high(i) =
             config.a * 0.5 *
-            ((1 + sigma_i) * u_state[i + 1] + (1 - sigma_i) * u_state[i + 2]);
+            ((1 + sigma_i) * u_state(i + 1) + (1 - sigma_i) * u_state(i + 2));
       });
 
       // Compute diff flux
       Kokkos::parallel_for("calc_diff_flux", ndx + 1, KOKKOS_LAMBDA(int i) {
-        adiff_flux[i] = flux_high[i] - flux_low[i];
+        adiff_flux(i) = flux_high(i) - flux_low(i);
       });
 
       // Do update with low flux
       Kokkos::parallel_for("low_flux_update", ndx, KOKKOS_LAMBDA(int i) {
-        u_state[i + 2] += dtdx * (flux_low[i] - flux_low[i + 1]);
+        u_state(i + 2) += dtdx * (flux_low(i) - flux_low(i + 1));
       });
 
       // Set BCs
-      u_state[0] = u_state[ndx + 1];
-      u_state[1] = u_state[ndx + 2];
-      u_state[ndx + 3] = u_state[2];
-      u_state[ndx + 4] = u_state[3];
+      u_state( 0 ) = u_state(ndx + 1);
+      u_state( 1 ) = u_state(ndx + 2);
+      u_state(ndx + 3) = u_state(2);
+      u_state(ndx + 4) = u_state(3);
 
       // Compute FCT flux
       Kokkos::parallel_for("calc_fct_flux", ndx + 1, KOKKOS_LAMBDA(int i) {
-        double sign_a = copysign(1.0, adiff_flux[i]);
-        double left_d = u_state[i + 1] - u_state[i + 0];
-        double right_d = u_state[i + 3] - u_state[i + 2];
-        flux_c[i] =
+        double sign_a = copysign(1.0, adiff_flux(i));
+        double left_d = u_state(i + 1) - u_state(i + 0);
+        double right_d = u_state(i + 3) - u_state(i + 2);
+        flux_c(i) =
             sign_a * std::max(0.0, std::min(std::min(sign_a * dxdt * left_d,
                                                      sign_a * dxdt * right_d),
-                                            abs(adiff_flux[i])));
+                                            abs(adiff_flux(i))));
       });
 
       // Do update
       Kokkos::parallel_for("full_update", ndx, KOKKOS_LAMBDA(int i) {
-        u_state[i + 2] += dtdx * (flux_c[i] - flux_c[i + 1]);
+        u_state(i + 2) += dtdx * (flux_c(i) - flux_c(i + 1));
       });
     }
     double time = timer.seconds();
 
     // Print results (problem size, time and bandwidth in GB/s).
     printf("Time for %d timestep computation %g s\n", config.ndt, time);
-
-    delete[] u_state;
-    delete[] flux_low;
-    delete[] flux_high;
-    delete[] adiff_flux;
-    delete[] flux_c;
   }
   Kokkos::finalize();
 
