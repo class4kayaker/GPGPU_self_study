@@ -51,10 +51,10 @@ int main(int argc, char *argv[]) {
       const double dxdt = (init.dx / config.dt);
 
       // Set BCs
-      u_state( 0 ) = u_state(ndx + 1);
-      u_state( 1 ) = u_state(ndx + 2);
-      u_state(ndx + 3) = u_state(2);
-      u_state(ndx + 4) = u_state(3);
+      u_state( 0 ) = u_state(ndx + 0);
+      u_state( 1 ) = u_state(ndx + 1);
+      u_state(ndx + 2) = u_state(2);
+      u_state(ndx + 3) = u_state(3);
 
       // Compute fluxes
       Kokkos::parallel_for("calc_low_flux", ndx + 1, KOKKOS_LAMBDA(int i) {
@@ -80,10 +80,10 @@ int main(int argc, char *argv[]) {
       });
 
       // Set BCs
-      u_state( 0 ) = u_state(ndx + 1);
-      u_state( 1 ) = u_state(ndx + 2);
-      u_state(ndx + 3) = u_state(2);
-      u_state(ndx + 4) = u_state(3);
+      u_state( 0 ) = u_state(ndx + 0);
+      u_state( 1 ) = u_state(ndx + 1);
+      u_state(ndx + 2) = u_state(2);
+      u_state(ndx + 3) = u_state(3);
 
       // Compute FCT flux
       Kokkos::parallel_for("calc_fct_flux", ndx + 1, KOKKOS_LAMBDA(int i) {

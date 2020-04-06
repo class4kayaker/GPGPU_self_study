@@ -11,7 +11,7 @@ void write_state(const std::string outputfn,
                  const struct FCT_initialization::InitState &state) {
 
   try {
-    H5::H5File outputf(outputfn.c_str(), H5F_ACC_EXCL);
+    H5::H5File outputf(outputfn.c_str(), H5F_ACC_TRUNC);
 
     // Create proplist
     double fill_value = 0.0;
