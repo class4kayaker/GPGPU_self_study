@@ -3,14 +3,19 @@ requires = ["flit_core >=2,<3"]
 build-backend = "flit_core.buildapi"
 
 [tool.flit.metadata]
-module = "fdm_mms_utility"
+module = "fdm_validation_utility"
 author = "Jonathan Robey"
 author-email = "class4kayaker@gmail.com"
 description-file = "README.md"
 license = "MIT"
 requires-python = "~=3.6"
 requires = [
+    "numpy",
+    "h5py",
 ]
+
+[tool.flit.entrypoints."console_scripts"]
+fdm_validation_utility = "fdm_validation_utility:main"
 
 [tool.black]
 line-length=79
