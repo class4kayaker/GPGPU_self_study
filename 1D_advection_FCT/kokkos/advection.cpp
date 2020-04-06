@@ -5,7 +5,7 @@
 
 #include <Kokkos_Core.hpp>
 
-#include "../utils/advection_utils.h"
+#include "../utils/advection_output.h"
 
 int main(int argc, char *argv[]) {
   double end_time = 0.0;
@@ -24,6 +24,8 @@ int main(int argc, char *argv[]) {
 
   FCT_initialization::sine_init(init, config, config.init_time);
 
+  FCT_output::write_state("start_data.h5", init);
+
   config.compute_timestep(init.dx);
 
   Kokkos::initialize(argc, argv);
@@ -37,7 +39,7 @@ int main(int argc, char *argv[]) {
 
     // Initialize U
     for (int i = 0; i < ndx; ++i) {
-      u_state[i + 2] = init.u[i];
+      u_state(i + 2) = init.u[i];
     }
 
     // Timer products.
@@ -100,6 +102,16 @@ int main(int argc, char *argv[]) {
       });
     }
     double time = timer.seconds();
+
+    struct FCT_initialization::InitState end_state(ndx);
+    end_state.dx = init.dx;
+    end_state.time = config.end_time;
+
+    for(size_t i = 0; i < ndx; ++i){
+        end_state.u[i] = u_state(i+2);
+    }
+
+    FCT_output::write_state("end_data.h5", end_state);
 
     // Print results (problem size, time and bandwidth in GB/s).
     printf("Time for %d timestep computation %g s\n", config.ndt, time);
