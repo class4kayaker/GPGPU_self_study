@@ -81,9 +81,9 @@ class FDM_Error:
     def pprint_string(self):
         return (
             f"Errors: "
-            f"L1 {self.L1_err()} "
-            f"L2 {self.L2_err()} "
-            f"Linf {self.Linf_err()}"
+            f"L1 {self.L1_err():.6e} "
+            f"L2 {self.L2_err():.6e} "
+            f"Linf {self.Linf_err():.6e}"
         )
 
 

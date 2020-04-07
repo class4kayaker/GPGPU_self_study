@@ -41,13 +41,13 @@ struct ProblemConfig parse_args(int argc, char *argv[]) {
   for (int i = 0; i < argc; i++) {
     if ((strcmp(argv[i], "-I") == 0)) {
       init_h5_fn = std::string(argv[++i]);
-      std::cout << " User init file is " << init_h5_fn << std::endl;
+      std::cout << "  User init file is " << init_h5_fn << std::endl;
     } else if ((strcmp(argv[i], "-O") == 0)) {
       end_h5_fn = std::string(argv[++i]);
-      std::cout << " User end file is " << end_h5_fn << std::endl;
+      std::cout << "  User end file is " << end_h5_fn << std::endl;
     } else if ((strcmp(argv[i], "-T") == 0)) {
       end_time = atof(argv[++i]);
-      printf("  User end_time is %g\n", end_time);
+      std::cout << "  User end time is "  << end_time << std::endl;
     } else if ((strcmp(argv[i], "-h") == 0) ||
                (strcmp(argv[i], "-help") == 0)) {
       printf("  -help (-h):            print this message\n\n");
