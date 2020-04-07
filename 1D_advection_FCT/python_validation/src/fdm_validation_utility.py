@@ -26,29 +26,84 @@ class FDM_Advection_State:
     @classmethod
     def from_h5(cls, h5fn):
         with h5py.File(h5fn, "r") as f:
-            dx = f['dx']
-            time = f['time']
-            u = f['state']
+            dx = f["dx"]
+            time = f["time"]
+            u = f["state"]
             return cls(u, dx, time)
 
     def to_h5(self, h5fn):
         with h5py.File(h5fn, "w") as f:
-            f['dx'] = self.dx
-            f['time'] = self.time
-            f['state'] = self.u
+            f["dx"] = self.dx
+            f["time"] = self.time
+            f["state"] = self.u
 
     @classmethod
     def sine_init(cls, config, time=0.0):
         ndx = config.ndx
-        dx = 1.0/ndx
-        x = numpy.linspace(0.0, 1.0, num=ndx+1)
-        u = numpy.sin(2.0*numpy.pi*(0.5*(x[1:]-x[:-1])-config.a*time))
-        cls(u, dx)
+        dx = 1.0 / ndx
+        x = numpy.linspace(0.0, 1.0, num=ndx + 1)
+        u = numpy.sin(
+            2.0 * numpy.pi * (0.5 * (x[1:] + x[:-1]) - config.a * time)
+        )
+        return cls(u, dx)
 
 
-def parse_args(argv):
-    pass
+init_by_name = {
+    "SINE": FDM_Advection_State.sine_init,
+}
+
+
+def generate_init(args):
+    config = FDM_Problem_Config(args.ndx, args.vel, args.sigma)
+    init_cond = init_by_name[args.init](config)
+    init_cond.to_h5(args.output)
+
+
+def parse_args(args):
+    parser = argparse.ArgumentParser(description="")
+
+    parser.add_argument(
+        "--vel", type=float, default=3.0, help="Advection velocity"
+    )
+
+    parser.add_argument(
+        "--sigma", type=float, default=0.9, help="CFL number"
+    )
+
+    subparsers = parser.add_subparsers()
+
+    # Init parser
+
+    init_create_parser = subparsers.add_parser(
+        "create_init", description="Create test problem initial state"
+    )
+
+    init_create_parser.add_argument(
+        "--init",
+        choices=init_by_name.keys(),
+        required=True,
+        help="Name of initial state to generate",
+    )
+
+    init_create_parser.add_argument(
+        "--ndx",
+        type=int,
+        required=True,
+        help="Mesh size",
+    )
+
+    init_create_parser.add_argument(
+        "--output", "-o",
+        default="initial_condition.h5",
+        help="Output File",
+    )
+
+    init_create_parser.set_defaults(utilname="INIT")
+
+    return parser.parse_args(args)
 
 
 def main():
-    pass
+    parsed_args = parse_args(sys.argv[1:])
+    if parsed_args.utilname == "INIT":
+        generate_init(parsed_args)
