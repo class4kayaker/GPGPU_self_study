@@ -15,28 +15,32 @@ int main(int argc, char *argv[]) {
   FCT_initialization::ProblemConfig config =
       FCT_initialization::parse_args(argc, argv);
 
-
   struct FCT_initialization::InitState init;
 
   FCT_output::read_state(config.hdf5_init_fn, init);
 
   config.compute_timestep(init.time, init.dx);
-  
+
   const int ndx = init.ndx;
 
   Kokkos::initialize(argc, argv);
   {
     // Allocate y, x vectors and Matrix A
-    Kokkos::View<double *> u_state("u_state", ndx + 2 * 2);
+    typedef Kokkos::View<double *> VectorViewType;
+    VectorViewType u_state("u_state", ndx + 2 * 2);
+    VectorViewType::HostMirror host_u_state =
+        Kokkos::create_mirror_view(u_state);
     Kokkos::View<double *> flux_low("flux_low", ndx + 1);
     Kokkos::View<double *> flux_high("flux_high", ndx + 1);
     Kokkos::View<double *> adiff_flux("adiff_flux", ndx + 1);
     Kokkos::View<double *> flux_c("flux_c", ndx + 1);
 
     // Initialize U
-    for (int i = 0; i < ndx; ++i) {
-      u_state(i + 2) = init.u[i];
+    for (unsigned int i = 0; i < ndx; ++i) {
+      host_u_state(i + 2) = init.u[i];
     }
+
+    Kokkos::deep_copy(u_state, host_u_state);
 
     // Timer products.
     Kokkos::Timer timer;
@@ -47,8 +51,8 @@ int main(int argc, char *argv[]) {
       const double dxdt = (init.dx / config.dt);
 
       // Set BCs
-      u_state( 0 ) = u_state(ndx + 0);
-      u_state( 1 ) = u_state(ndx + 1);
+      u_state(0) = u_state(ndx + 0);
+      u_state(1) = u_state(ndx + 1);
       u_state(ndx + 2) = u_state(2);
       u_state(ndx + 3) = u_state(3);
 
@@ -76,8 +80,8 @@ int main(int argc, char *argv[]) {
       });
 
       // Set BCs
-      u_state( 0 ) = u_state(ndx + 0);
-      u_state( 1 ) = u_state(ndx + 1);
+      u_state(0) = u_state(ndx + 0);
+      u_state(1) = u_state(ndx + 1);
       u_state(ndx + 2) = u_state(2);
       u_state(ndx + 3) = u_state(3);
 
@@ -99,12 +103,14 @@ int main(int argc, char *argv[]) {
     }
     double time = timer.seconds();
 
+    Kokkos::deep_copy(host_u_state, u_state);
+
     struct FCT_initialization::InitState end_state(ndx);
     end_state.dx = init.dx;
     end_state.time = config.end_time;
 
-    for(size_t i = 0; i < ndx; ++i){
-        end_state.u[i] = u_state(i+2);
+    for (unsigned int i = 0; i < ndx; ++i) {
+      end_state.u[i] = host_u_state(i + 2);
     }
 
     FCT_output::write_state("end_data.h5", end_state);
