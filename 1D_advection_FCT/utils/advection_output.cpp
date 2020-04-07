@@ -40,7 +40,7 @@ void write_state(const std::string outputfn,
 
     // Store state data
     {
-      hsize_t state_fdim[] = {(hsize_t) state.ndx};
+      hsize_t state_fdim[] = {(hsize_t)state.ndx};
       H5::DataSpace state_fspace = H5::DataSpace(1, state_fdim);
 
       H5::DataSet state_data(outputf.createDataSet(
@@ -54,7 +54,8 @@ void write_state(const std::string outputfn,
   }
 }
 
-void read_state(const std::string inputfn, FCT_initialization::InitState &to_return) {
+void read_state(const std::string inputfn,
+                FCT_initialization::InitState &to_return) {
   try {
     H5::H5File inputf(inputfn.c_str(), H5F_ACC_RDONLY);
 
@@ -66,28 +67,28 @@ void read_state(const std::string inputfn, FCT_initialization::InitState &to_ret
 
     // Read time
     {
-    H5::DataSet time_data = inputf.openDataSet(TIME_DATA_NAME);
+      H5::DataSet time_data = inputf.openDataSet(TIME_DATA_NAME);
 
-    time_data.read(&time, H5::PredType::NATIVE_DOUBLE);
+      time_data.read(&time, H5::PredType::NATIVE_DOUBLE);
     }
 
     // Read dx
     {
-        H5::DataSet dx_data = inputf.openDataSet(DX_DATA_NAME);
+      H5::DataSet dx_data = inputf.openDataSet(DX_DATA_NAME);
 
-    dx_data.write(&dx, H5::PredType::NATIVE_DOUBLE);
+      dx_data.read(&dx, H5::PredType::NATIVE_DOUBLE);
     }
 
     {
-    // Get data size
-    H5::DataSet state_data = inputf.openDataSet(STATE_DATA_NAME);
-    H5::DataSpace state_fspace = state_data.getSpace();
-    state_fspace.getSimpleExtentDims(&ndx, NULL);
+      // Get data size
+      H5::DataSet state_data = inputf.openDataSet(STATE_DATA_NAME);
+      H5::DataSpace state_fspace = state_data.getSpace();
+      state_fspace.getSimpleExtentDims(&ndx, NULL);
 
-    u = new double[ndx];
+      u = new double[ndx];
 
-    // Read state data
-    state_data.read(u, H5::PredType::NATIVE_DOUBLE);
+      // Read state data
+      state_data.read(u, H5::PredType::NATIVE_DOUBLE);
     }
 
     to_return.ndx = ndx;

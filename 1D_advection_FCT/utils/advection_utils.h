@@ -8,21 +8,22 @@
 #include <cstdio>
 #include <cstring>
 #include <math.h>
+#include <string>
 #include <vector>
 
 namespace FCT_initialization {
 
 struct ProblemConfig {
-  ProblemConfig(const int ndx, const double a, const double sigma,
-                const double init_time, const double end_time);
+  ProblemConfig(const double a, const double sigma, const double end_time,
+                const std::string init_fn, const std::string end_fn);
 
-  void compute_timestep(const double dx);
+  void compute_timestep(const double curr_time, const double dx);
 
-  const int ndx;
   const double a;
   const double sigma;
-  const double init_time;
+  const std::string hdf5_init_fn;
   const double end_time;
+  const std::string hdf5_end_fn;
 
   // Derived values
   int ndt;
@@ -43,8 +44,6 @@ void sine_init(InitState &state, const ProblemConfig &config,
                const double time);
 
 struct ProblemConfig parse_args(int argc, char *argv[]);
-
-void check_bounds(const ProblemConfig &config);
 } // namespace FCT_initialization
 
 #endif

@@ -15,18 +15,14 @@ int main(int argc, char *argv[]) {
   FCT_initialization::ProblemConfig config =
       FCT_initialization::parse_args(argc, argv);
 
-  const int ndx = config.ndx;
 
-  // Check sizes.
-  FCT_initialization::check_bounds(config);
+  struct FCT_initialization::InitState init;
 
-  struct FCT_initialization::InitState init(ndx);
+  FCT_output::read_state(config.hdf5_init_fn, init);
 
-  FCT_initialization::sine_init(init, config, config.init_time);
-
-  FCT_output::write_state("start_data.h5", init);
-
-  config.compute_timestep(init.dx);
+  config.compute_timestep(init.time, init.dx);
+  
+  const int ndx = init.ndx;
 
   Kokkos::initialize(argc, argv);
   {
