@@ -24,16 +24,16 @@ def sinusoidal(x):
 
 
 init_by_name = {
-    "Sinusoidal": lambda config, time=0.0: FDM_Advection_State.func_init(
-        config, sinusoidal, time
+    "Sinusoidal": lambda config, ndx, time=0.0: FDM_Advection_State.func_init(
+        config, ndx, sinusoidal, time
     ),
-    "Semicircle": lambda config, time=0.0: FDM_Advection_State.func_init(
-        config, semicircle, time
+    "Semicircle": lambda config, ndx, time=0.0: FDM_Advection_State.func_init(
+        config, ndx, semicircle, time
     ),
-    "Gaussian": lambda config, time=0.0: FDM_Advection_State.func_init(
-        config, gaussian, time
+    "Gaussian": lambda config, ndx, time=0.0: FDM_Advection_State.func_init(
+        config, ndx, gaussian, time
     ),
-    "Square_Wave": lambda config, time=0.0: FDM_Advection_State.func_init(
-        config, square_wave, time
+    "Square_Wave": lambda config, ndx, time=0.0: FDM_Advection_State.func_init(
+        config, ndx, square_wave, time
     ),
 }

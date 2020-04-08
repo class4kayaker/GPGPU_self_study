@@ -10,21 +10,23 @@ from fdm_validation_utility import (
 
 
 def generate_init(args):
-    config = FDM_Problem_Config(args.ndx, args.vel, args.sigma)
-    init_cond = init_by_name[args.init](config)
+    config = FDM_Problem_Config(args.vel, args.sigma)
+    init_cond = init_by_name[args.init](config, args.ndx, args.time)
     init_cond.to_h5(args.output)
 
 
-def validate(args):
+def calculate_error(args):
     computed = FDM_Advection_State.from_h5(args.state)
-    config = FDM_Problem_Config(computed.ndx, args.vel, args.sigma)
-    true = init_by_name[args.init](config, time=computed.time)
+    config = FDM_Problem_Config(args.vel, args.sigma)
+    true = init_by_name[args.init](config, computed.ndx, time=computed.time)
     err = FDM_Error(computed, true)
     print(err.pprint_string())
 
 
 def parse_args(args):
-    parser = argparse.ArgumentParser(description="Utility to aid in validating FCT implementations")
+    parser = argparse.ArgumentParser(
+        description="Utility to aid in validating FCT implementations"
+    )
 
     parser.add_argument(
         "--vel", type=float, default=3.0, help="Advection velocity"
@@ -49,6 +51,10 @@ def parse_args(args):
 
     init_create_parser.add_argument(
         "--ndx", type=int, required=True, help="Mesh size",
+    )
+
+    init_create_parser.add_argument(
+        "--time", type=float, default=0.0, help="Initialization time",
     )
 
     init_create_parser.add_argument(
@@ -84,4 +90,4 @@ def main():
     if parsed_args.utilname == "INIT":
         generate_init(parsed_args)
     elif parsed_args.utilname == "ERROR":
-        validate(parsed_args)
+        calculate_error(parsed_args)

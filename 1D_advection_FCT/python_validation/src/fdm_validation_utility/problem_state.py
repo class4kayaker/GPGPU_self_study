@@ -3,8 +3,7 @@ import h5py
 
 
 class FDM_Problem_Config:
-    def __init__(self, ndx, a=3.0, sigma=0.9):
-        self.ndx = ndx
+    def __init__(self, a=3.0, sigma=0.9):
         self.a = a
         self.sigma = sigma
 
@@ -31,8 +30,7 @@ class FDM_Advection_State:
             f["state"] = self.u
 
     @classmethod
-    def func_init(cls, config, func, time=0.0):
-        ndx = config.ndx
+    def func_init(cls, config, ndx, func, time=0.0):
         dx = 1.0 / ndx
         x = numpy.linspace(0.0, 1.0, num=ndx + 1)
         shift_x = 0.5 * (x[1:] + x[:-1]) - config.a * time
