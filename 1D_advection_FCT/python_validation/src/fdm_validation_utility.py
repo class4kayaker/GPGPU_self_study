@@ -16,6 +16,26 @@ class FDM_Problem_Config:
         self.sigma = sigma
 
 
+def square_wave(x):
+    return numpy.where((x >= 0.25) & (x <= 0.75), 1.0, 0.0)
+
+
+def square_wave_exc(x):
+    return numpy.where((x > 0.25) & (x < 0.75), 1.0, 0.0)
+
+
+def semicircle(x):
+    return numpy.sqrt(0.25 - (x - 0.5) ** 2)
+
+
+def gaussian(x):
+    return numpy.exp(-256.0 * (x - 0.5) ** 2)
+
+
+def sinusoidal(x):
+    return 0.5 * (1 - numpy.cos(2 * numpy.pi * x))
+
+
 class FDM_Advection_State:
     def __init__(self, u, dx, time=0.0):
         self.ndx = u.shape[0]
@@ -38,18 +58,29 @@ class FDM_Advection_State:
             f["state"] = self.u
 
     @classmethod
-    def sine_init(cls, config, time=0.0):
+    def func_init(cls, config, func, time=0.0):
         ndx = config.ndx
         dx = 1.0 / ndx
         x = numpy.linspace(0.0, 1.0, num=ndx + 1)
-        u = numpy.sin(
-            2.0 * numpy.pi * (0.5 * (x[1:] + x[:-1]) - config.a * time)
-        )
+        shift_x = 0.5 * (x[1:] + x[:-1]) - config.a * time
+        n_shift_x = shift_x - numpy.floor(shift_x)
+        u = func(n_shift_x)
         return cls(u, dx, time=time)
 
 
 init_by_name = {
-    "SINE": FDM_Advection_State.sine_init,
+    "Sinusoidal": lambda config, time=0.0: FDM_Advection_State.func_init(
+        config, sinusoidal, time
+    ),
+    "Semicircle": lambda config, time=0.0: FDM_Advection_State.func_init(
+        config, semicircle, time
+    ),
+    "Gaussian": lambda config, time=0.0: FDM_Advection_State.func_init(
+        config, gaussian, time
+    ),
+    "Square_Wave": lambda config, time=0.0: FDM_Advection_State.func_init(
+        config, square_wave, time
+    ),
 }
 
 

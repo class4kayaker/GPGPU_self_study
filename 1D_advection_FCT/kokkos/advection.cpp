@@ -136,7 +136,7 @@ int main(int argc, char *argv[]) {
       end_state.u[i] = host_u_state(i + 2);
     }
 
-    FCT_output::write_state("end_data.h5", end_state);
+    FCT_output::write_state(config.hdf5_end_fn, end_state);
 
     // Print results (problem size, time and bandwidth in GB/s).
     printf("Time for %d timestep computation %g s\n", config.ndt, time);
