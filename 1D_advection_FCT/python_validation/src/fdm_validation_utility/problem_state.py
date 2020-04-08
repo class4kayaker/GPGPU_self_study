@@ -3,9 +3,20 @@ import h5py
 
 
 class FDM_Problem_Config:
-    def __init__(self, a=3.0, sigma=0.9):
+    def __init__(self, a=3.0, sigma=0.9, end_time=0.0):
         self.a = a
         self.sigma = sigma
+        self.end_time = end_time
+
+    def cli_args(self):
+        return [
+            "-sigma",
+            str(self.sigma),
+            "-vel",
+            str(self.a),
+            "-T",
+            str(self.end_time),
+        ]
 
 
 class FDM_Advection_State:

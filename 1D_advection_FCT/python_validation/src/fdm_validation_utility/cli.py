@@ -6,6 +6,7 @@ from fdm_validation_utility import (
     FDM_Advection_State,
     FDM_Error,
     init_by_name,
+    convergence_test,
 )
 
 
@@ -23,16 +24,22 @@ def calculate_error(args):
     print(err.pprint_string())
 
 
+def convergence(args):
+    convergence_test(
+        args.executable,
+        args.init,
+        args.vel,
+        args.sigma,
+        args.time,
+        args.kstart,
+        args.kend,
+    )
+
+
 def parse_args(args):
     parser = argparse.ArgumentParser(
         description="Utility to aid in validating FCT implementations"
     )
-
-    parser.add_argument(
-        "--vel", type=float, default=3.0, help="Advection velocity"
-    )
-
-    parser.add_argument("--sigma", type=float, default=0.9, help="CFL number")
 
     subparsers = parser.add_subparsers()
 
@@ -40,6 +47,14 @@ def parse_args(args):
 
     init_create_parser = subparsers.add_parser(
         "create_init", description="Create test problem initial state"
+    )
+
+    init_create_parser.add_argument(
+        "--vel", type=float, default=3.0, help="Advection velocity"
+    )
+
+    init_create_parser.add_argument(
+        "--sigma", type=float, default=0.9, help="CFL number"
     )
 
     init_create_parser.add_argument(
@@ -68,6 +83,14 @@ def parse_args(args):
     )
 
     error_parser.add_argument(
+        "--vel", type=float, default=3.0, help="Advection velocity"
+    )
+
+    error_parser.add_argument(
+        "--sigma", type=float, default=0.9, help="CFL number"
+    )
+
+    error_parser.add_argument(
         "--init",
         choices=init_by_name.keys(),
         required=True,
@@ -82,6 +105,43 @@ def parse_args(args):
 
     error_parser.set_defaults(utilname="ERROR")
 
+    convergence_parser = subparsers.add_parser(
+        "convergence", description="Utility to run a standard convergence test"
+    )
+
+    convergence_parser.add_argument(
+        "executable", help="Executable to test"
+    )
+
+    convergence_parser.add_argument(
+        "--vel", type=float, default=3.0, help="Advection velocity"
+    )
+
+    convergence_parser.add_argument(
+        "--sigma", type=float, default=0.9, help="CFL number"
+    )
+
+    convergence_parser.add_argument(
+        "--time", type=float, default=0.0, help="Comparison Time",
+    )
+
+    convergence_parser.add_argument(
+        "--init",
+        choices=init_by_name.keys(),
+        required=True,
+        help="Name of initial state to generate",
+    )
+
+    convergence_parser.add_argument(
+        "--kstart", type=int, default=3
+    )
+
+    convergence_parser.add_argument(
+        "--kend", type=int, default=7
+    )
+
+    convergence_parser.set_defaults(utilname="CONVERGENCE")
+
     return parser.parse_args(args)
 
 
@@ -91,3 +151,5 @@ def main():
         generate_init(parsed_args)
     elif parsed_args.utilname == "ERROR":
         calculate_error(parsed_args)
+    elif parsed_args.utilname == "CONVERGENCE":
+        convergence(parsed_args)

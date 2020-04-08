@@ -30,8 +30,17 @@ void sine_init(InitState &state, const ProblemConfig &config,
   }
 }
 
+void print_config(const ProblemConfig &config) {
+  std::cout << "Configuration:" << std::endl
+            << "  Velocity: " << config.a << std::endl
+            << "  Sigma:    " << config.sigma << std::endl
+            << "  End Time: " << config.end_time << std::endl
+            << "  Init H5:  " << config.hdf5_init_fn << std::endl
+            << "  End H5:   " << config.hdf5_end_fn << std::endl;
+}
+
 struct ProblemConfig parse_args(int argc, char *argv[]) {
-  const double a = 3.0;
+  double a = 3.0;
   double sigma = 0.9;
   double end_time = 0.0;
   std::string init_h5_fn = "init_state.h5";
@@ -39,15 +48,37 @@ struct ProblemConfig parse_args(int argc, char *argv[]) {
 
   // Read command line arguments.
   for (int i = 0; i < argc; i++) {
-    if ((strcmp(argv[i], "-I") == 0)) {
+    std::string arg_i = argv[i];
+    if ((arg_i == "-I")) {
+      if (i + 1 >= argc) {
+        std::cout << "  Value required for \"" << arg_i << "\"" << std::endl;
+        exit(1);
+      }
       init_h5_fn = std::string(argv[++i]);
-      std::cout << "  User init file is " << init_h5_fn << std::endl;
     } else if ((strcmp(argv[i], "-O") == 0)) {
+      if (i + 1 >= argc) {
+        std::cout << "  Value required for \"" << arg_i << "\"" << std::endl;
+        exit(1);
+      }
       end_h5_fn = std::string(argv[++i]);
-      std::cout << "  User end file is " << end_h5_fn << std::endl;
     } else if ((strcmp(argv[i], "-T") == 0)) {
+      if (i + 1 >= argc) {
+        std::cout << "  Value required for \"" << arg_i << "\"" << std::endl;
+        exit(1);
+      }
       end_time = atof(argv[++i]);
-      std::cout << "  User end time is "  << end_time << std::endl;
+    } else if ((strcmp(argv[i], "-sigma") == 0)) {
+      if (i + 1 >= argc) {
+        std::cout << "  Value required for \"" << arg_i << "\"" << std::endl;
+        exit(1);
+      }
+      sigma = atof(argv[++i]);
+    } else if ((strcmp(argv[i], "-vel") == 0)) {
+      if (i + 1 >= argc) {
+        std::cout << "  Value required for \"" << arg_i << "\"" << std::endl;
+        exit(1);
+      }
+      a = atof(argv[++i]);
     } else if ((strcmp(argv[i], "-h") == 0) ||
                (strcmp(argv[i], "-help") == 0)) {
       printf("  -help (-h):            print this message\n\n");
@@ -56,6 +87,8 @@ struct ProblemConfig parse_args(int argc, char *argv[]) {
   }
 
   struct ProblemConfig to_return(a, sigma, end_time, init_h5_fn, end_h5_fn);
+
+  print_config(to_return);
 
   return to_return;
 }
