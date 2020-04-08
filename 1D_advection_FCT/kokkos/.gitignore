@@ -1,3 +1,4 @@
 .spack-env
+spack.lock
 loads
 build*
