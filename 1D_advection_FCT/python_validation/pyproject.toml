@@ -15,7 +15,7 @@ requires = [
 ]
 
 [tool.flit.entrypoints."console_scripts"]
-fdm_validation_utility = "fdm_validation_utility:main"
+fdm_validation_utility = "fdm_validation_utility.cli:main"
 
 [tool.black]
 line-length=79
