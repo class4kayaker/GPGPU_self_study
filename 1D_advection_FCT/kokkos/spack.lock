@@ -5,215 +5,16 @@
  },
  "roots": [
   {
-   "hash": "a4nitphgzbf27r7jx5737strdat5slvt",
-   "spec": "kokkos"
+   "hash": "d4jlvhrtioealgtpl7kvqy2lv3bqdmdq",
+   "spec": "cmake@3.15.4"
   },
   {
-   "hash": "be2p26iuppmgdbbe3cz567d3pgqo5l56",
-   "spec": "cmake@3.15.4"
+   "hash": "s5cq3pfuba3cw5tbupux2wbxfgrbumgt",
+   "spec": "kokkos@develop+openmp+rocm"
   }
  ],
  "concrete_specs": {
-  "a4nitphgzbf27r7jx5737strdat5slvt": {
-   "kokkos": {
-    "version": "develop",
-    "arch": {
-     "platform": "linux",
-     "platform_os": "neon18",
-     "target": {
-      "name": "skylake",
-      "vendor": "GenuineIntel",
-      "features": [
-       "adx",
-       "aes",
-       "avx",
-       "avx2",
-       "bmi1",
-       "bmi2",
-       "clflushopt",
-       "f16c",
-       "fma",
-       "mmx",
-       "movbe",
-       "pclmulqdq",
-       "popcnt",
-       "rdrand",
-       "rdseed",
-       "sse",
-       "sse2",
-       "sse4_1",
-       "sse4_2",
-       "ssse3",
-       "xsavec",
-       "xsaveopt"
-      ],
-      "generation": 0,
-      "parents": [
-       "broadwell"
-      ]
-     }
-    },
-    "compiler": {
-     "name": "gcc",
-     "version": "8.3.0"
-    },
-    "namespace": "kokkos",
-    "parameters": {
-     "aggressive_vectorization": false,
-     "amdavx": false,
-     "armv80": false,
-     "armv81": false,
-     "armv8_thunderx": false,
-     "armv8_tx2": false,
-     "bdw": false,
-     "bgq": false,
-     "build_type": "RelWithDebInfo",
-     "carrizo": false,
-     "compiler_warnings": false,
-     "cuda": false,
-     "cuda_arch": [
-      "none"
-     ],
-     "cuda_lambda": false,
-     "cuda_ldg_intrinsic": false,
-     "cuda_relocatable_device_code": false,
-     "cuda_uvm": false,
-     "debug": false,
-     "debug_bounds_check": false,
-     "debug_dualview_modify_check": false,
-     "deprecated_code": false,
-     "diy": false,
-     "epyc": false,
-     "examples": false,
-     "explicit_instantiation": false,
-     "fiji": false,
-     "gfx901": false,
-     "hpx": false,
-     "hpx_async_dispatch": false,
-     "hsw": false,
-     "hwloc": false,
-     "kaveri": false,
-     "kepler30": false,
-     "kepler32": false,
-     "kepler35": false,
-     "kepler37": false,
-     "knc": false,
-     "knl": false,
-     "maxwell50": false,
-     "maxwell52": false,
-     "maxwell53": false,
-     "memkind": false,
-     "numactl": false,
-     "openmp": false,
-     "pascal60": false,
-     "pascal61": false,
-     "power7": false,
-     "power8": false,
-     "power9": false,
-     "profiling": true,
-     "profiling_load_print": false,
-     "pthread": false,
-     "qthread": false,
-     "rocm": false,
-     "ryzen": false,
-     "serial": false,
-     "skx": false,
-     "snb": false,
-     "tests": false,
-     "turing75": false,
-     "vega": false,
-     "volta70": false,
-     "volta72": false,
-     "wsm": false,
-     "cflags": [],
-     "cppflags": [],
-     "cxxflags": [],
-     "fflags": [],
-     "ldflags": [],
-     "ldlibs": []
-    },
-    "dependencies": {
-     "cmake": {
-      "hash": "klfn52id6muqxido3rtfci7k6yrljaqb",
-      "type": [
-       "build"
-      ]
-     }
-    },
-    "hash": "j7zpxg4felesvcplyu2wbzaclshaucm7"
-   }
-  },
-  "klfn52id6muqxido3rtfci7k6yrljaqb": {
-   "cmake": {
-    "version": "3.10.2",
-    "arch": {
-     "platform": "linux",
-     "platform_os": "neon18",
-     "target": {
-      "name": "skylake",
-      "vendor": "GenuineIntel",
-      "features": [
-       "adx",
-       "aes",
-       "avx",
-       "avx2",
-       "bmi1",
-       "bmi2",
-       "clflushopt",
-       "f16c",
-       "fma",
-       "mmx",
-       "movbe",
-       "pclmulqdq",
-       "popcnt",
-       "rdrand",
-       "rdseed",
-       "sse",
-       "sse2",
-       "sse4_1",
-       "sse4_2",
-       "ssse3",
-       "xsavec",
-       "xsaveopt"
-      ],
-      "generation": 0,
-      "parents": [
-       "broadwell"
-      ]
-     }
-    },
-    "compiler": {
-     "name": "gcc",
-     "version": "8.3.0"
-    },
-    "namespace": "builtin",
-    "parameters": {
-     "doc": false,
-     "ncurses": true,
-     "openssl": true,
-     "ownlibs": true,
-     "patches": [
-      "dd3a40d4d92f6b2158b87d6fb354c277947c776424aa03f6dc8096cf3135f5d0"
-     ],
-     "qt": false,
-     "cflags": [],
-     "cppflags": [],
-     "cxxflags": [],
-     "fflags": [],
-     "ldflags": [],
-     "ldlibs": []
-    },
-    "external": {
-     "path": "/usr",
-     "module": null
-    },
-    "patches": [
-     "dd3a40d4d92f6b2158b87d6fb354c277947c776424aa03f6dc8096cf3135f5d0"
-    ],
-    "hash": "klfn52id6muqxido3rtfci7k6yrljaqb"
-   }
-  },
-  "be2p26iuppmgdbbe3cz567d3pgqo5l56": {
+  "d4jlvhrtioealgtpl7kvqy2lv3bqdmdq": {
    "cmake": {
     "version": "3.15.4",
     "arch": {
@@ -254,7 +55,7 @@
     },
     "compiler": {
      "name": "gcc",
-     "version": "8.3.0"
+     "version": "8.4.0"
     },
     "namespace": "builtin",
     "parameters": {
@@ -272,24 +73,24 @@
     },
     "dependencies": {
      "ncurses": {
-      "hash": "zzutqjkyaklokrd646hjk24oeboerps6",
+      "hash": "v3axv3mf3siprqhzyfquh7h25shtttlf",
       "type": [
        "build",
        "link"
       ]
      },
      "openssl": {
-      "hash": "nmi6qcksezwbsehywdfkl64cawai6hxc",
+      "hash": "k7ibbeu66767rc3o66bt6zl365snejqo",
       "type": [
        "build",
        "link"
       ]
      }
     },
-    "hash": "y7fe35fvvetoxyno5nlpk5aqupzadtie"
+    "hash": "o6sp2aqhlfojknb4ntukmowmkcqeo6gp"
    }
   },
-  "zzutqjkyaklokrd646hjk24oeboerps6": {
+  "v3axv3mf3siprqhzyfquh7h25shtttlf": {
    "ncurses": {
     "version": "6.1",
     "arch": {
@@ -330,7 +131,7 @@
     },
     "compiler": {
      "name": "gcc",
-     "version": "8.3.0"
+     "version": "8.4.0"
     },
     "namespace": "builtin",
     "parameters": {
@@ -345,16 +146,16 @@
     },
     "dependencies": {
      "pkgconf": {
-      "hash": "nrz4nglterghdshvuqbzxxyge3wk2buj",
+      "hash": "kzc2jwa7qg2hdnfpbwoje2vtu5gomima",
       "type": [
        "build"
       ]
      }
     },
-    "hash": "imww2smk5kkxibhkmylagsk5jfmuza7m"
+    "hash": "7xinzlbdnqnq63dmnixow5etkkhksmyf"
    }
   },
-  "nrz4nglterghdshvuqbzxxyge3wk2buj": {
+  "kzc2jwa7qg2hdnfpbwoje2vtu5gomima": {
    "pkgconf": {
     "version": "1.6.3",
     "arch": {
@@ -395,7 +196,7 @@
     },
     "compiler": {
      "name": "gcc",
-     "version": "8.3.0"
+     "version": "8.4.0"
     },
     "namespace": "builtin",
     "parameters": {
@@ -406,10 +207,10 @@
      "ldflags": [],
      "ldlibs": []
     },
-    "hash": "nrz4nglterghdshvuqbzxxyge3wk2buj"
+    "hash": "kzc2jwa7qg2hdnfpbwoje2vtu5gomima"
    }
   },
-  "nmi6qcksezwbsehywdfkl64cawai6hxc": {
+  "k7ibbeu66767rc3o66bt6zl365snejqo": {
    "openssl": {
     "version": "1.1.1",
     "arch": {
@@ -450,7 +251,7 @@
     },
     "compiler": {
      "name": "gcc",
-     "version": "8.3.0"
+     "version": "8.4.0"
     },
     "namespace": "builtin",
     "parameters": {
@@ -466,7 +267,207 @@
      "path": "/usr",
      "module": null
     },
-    "hash": "nmi6qcksezwbsehywdfkl64cawai6hxc"
+    "hash": "k7ibbeu66767rc3o66bt6zl365snejqo"
+   }
+  },
+  "s5cq3pfuba3cw5tbupux2wbxfgrbumgt": {
+   "kokkos": {
+    "version": "develop",
+    "arch": {
+     "platform": "linux",
+     "platform_os": "neon18",
+     "target": {
+      "name": "skylake",
+      "vendor": "GenuineIntel",
+      "features": [
+       "adx",
+       "aes",
+       "avx",
+       "avx2",
+       "bmi1",
+       "bmi2",
+       "clflushopt",
+       "f16c",
+       "fma",
+       "mmx",
+       "movbe",
+       "pclmulqdq",
+       "popcnt",
+       "rdrand",
+       "rdseed",
+       "sse",
+       "sse2",
+       "sse4_1",
+       "sse4_2",
+       "ssse3",
+       "xsavec",
+       "xsaveopt"
+      ],
+      "generation": 0,
+      "parents": [
+       "broadwell"
+      ]
+     }
+    },
+    "compiler": {
+     "name": "gcc",
+     "version": "8.4.0"
+    },
+    "namespace": "kokkos",
+    "parameters": {
+     "aggressive_vectorization": false,
+     "amdavx": false,
+     "armv80": false,
+     "armv81": false,
+     "armv8_thunderx": false,
+     "armv8_tx2": false,
+     "bdw": false,
+     "bgq": false,
+     "build_type": "RelWithDebInfo",
+     "carrizo": false,
+     "compiler_warnings": false,
+     "cuda": false,
+     "cuda_arch": [
+      "none"
+     ],
+     "cuda_lambda": false,
+     "cuda_ldg_intrinsic": false,
+     "cuda_relocatable_device_code": false,
+     "cuda_uvm": false,
+     "debug": false,
+     "debug_bounds_check": false,
+     "debug_dualview_modify_check": false,
+     "deprecated_code": false,
+     "epyc": false,
+     "examples": false,
+     "explicit_instantiation": false,
+     "fiji": false,
+     "gfx901": false,
+     "hpx": false,
+     "hpx_async_dispatch": false,
+     "hsw": false,
+     "hwloc": false,
+     "kaveri": false,
+     "kepler30": false,
+     "kepler32": false,
+     "kepler35": false,
+     "kepler37": false,
+     "knc": false,
+     "knl": false,
+     "maxwell50": false,
+     "maxwell52": false,
+     "maxwell53": false,
+     "memkind": false,
+     "numactl": false,
+     "openmp": true,
+     "pascal60": false,
+     "pascal61": false,
+     "power7": false,
+     "power8": false,
+     "power9": false,
+     "profiling": true,
+     "profiling_load_print": false,
+     "pthread": false,
+     "qthread": false,
+     "rocm": true,
+     "ryzen": false,
+     "serial": false,
+     "skx": false,
+     "snb": false,
+     "std": "11",
+     "tests": false,
+     "turing75": false,
+     "vega": false,
+     "volta70": false,
+     "volta72": false,
+     "wrapper": false,
+     "wsm": false,
+     "cflags": [],
+     "cppflags": [],
+     "cxxflags": [],
+     "fflags": [],
+     "ldflags": [],
+     "ldlibs": []
+    },
+    "dependencies": {
+     "cmake": {
+      "hash": "2ycupfxp4ailaamrkcp5tv6h3czumyvt",
+      "type": [
+       "build"
+      ]
+     }
+    },
+    "hash": "qkhvuqj5kxep5wonnbdvd264i3vdl3ng"
+   }
+  },
+  "2ycupfxp4ailaamrkcp5tv6h3czumyvt": {
+   "cmake": {
+    "version": "3.10.2",
+    "arch": {
+     "platform": "linux",
+     "platform_os": "neon18",
+     "target": {
+      "name": "skylake",
+      "vendor": "GenuineIntel",
+      "features": [
+       "adx",
+       "aes",
+       "avx",
+       "avx2",
+       "bmi1",
+       "bmi2",
+       "clflushopt",
+       "f16c",
+       "fma",
+       "mmx",
+       "movbe",
+       "pclmulqdq",
+       "popcnt",
+       "rdrand",
+       "rdseed",
+       "sse",
+       "sse2",
+       "sse4_1",
+       "sse4_2",
+       "ssse3",
+       "xsavec",
+       "xsaveopt"
+      ],
+      "generation": 0,
+      "parents": [
+       "broadwell"
+      ]
+     }
+    },
+    "compiler": {
+     "name": "gcc",
+     "version": "8.4.0"
+    },
+    "namespace": "builtin",
+    "parameters": {
+     "doc": false,
+     "ncurses": true,
+     "openssl": true,
+     "ownlibs": true,
+     "patches": [
+      "dd3a40d4d92f6b2158b87d6fb354c277947c776424aa03f6dc8096cf3135f5d0"
+     ],
+     "qt": false,
+     "cflags": [],
+     "cppflags": [],
+     "cxxflags": [],
+     "fflags": [],
+     "ldflags": [],
+     "ldlibs": []
+    },
+    "external": {
+     "path": "/usr",
+     "module": null
+    },
+    "patches": [
+     "dd3a40d4d92f6b2158b87d6fb354c277947c776424aa03f6dc8096cf3135f5d0"
+    ],
+    "hash": "2ycupfxp4ailaamrkcp5tv6h3czumyvt"
    }
   }
  }

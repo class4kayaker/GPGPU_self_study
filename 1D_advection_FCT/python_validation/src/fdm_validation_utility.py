@@ -66,17 +66,16 @@ class FDM_Error:
             )
 
     def L1_err(self):
-        return self.computed.dx * numpy.sum(
-            numpy.abs(self.computed.u - self.true.u)
-        )
+        diff = self.computed.u - self.true.u
+        return self.computed.dx * numpy.sum(numpy.abs(diff))
 
     def L2_err(self):
-        return numpy.sqrt(
-            self.computed.dx * numpy.sum((self.computed.u - self.true.u) ** 2)
-        )
+        diff = self.computed.u - self.true.u
+        return numpy.sqrt(self.computed.dx * numpy.sum(diff * diff))
 
     def Linf_err(self):
-        return numpy.max(numpy.abs(self.computed.u - self.true.u))
+        diff = self.computed.u - self.true.u
+        return numpy.amax(numpy.abs(diff))
 
     def pprint_string(self):
         return (

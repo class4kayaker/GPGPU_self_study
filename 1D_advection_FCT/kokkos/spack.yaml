@@ -4,5 +4,5 @@
 # configuration settings.
 spack:
   # add package specs to the `specs` list
-  specs: [kokkos, cmake@3.15.4]
+  specs: [cmake@3.15.4, kokkos@develop+openmp+rocm]
   view: true
