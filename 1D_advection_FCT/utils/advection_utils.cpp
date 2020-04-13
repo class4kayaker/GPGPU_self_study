@@ -19,6 +19,10 @@ void ProblemConfig::compute_timestep(const double curr_time, const double dx) {
 InitState::InitState() : ndx(0), time(0.0), u(ndx, 0.0) {}
 InitState::InitState(const size_t ndx) : ndx(ndx), time(0.0), u(ndx, 0.0) {}
 
+StepState::StepState(const size_t ndx)
+    : ndx(ndx), u_state(ndx + 4, 0.0), flux_low(ndx + 1, 0.0),
+      flux_high(ndx + 1, 0.0), adiff_flux(ndx + 1, 0.0), flux_c(ndx + 1, 0.0) {}
+
 void sine_init(InitState &state, const ProblemConfig &config,
                const double time) {
   state.time = time;

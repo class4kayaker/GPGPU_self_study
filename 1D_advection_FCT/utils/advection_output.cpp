@@ -106,4 +106,36 @@ void read_state(const std::string inputfn,
   }
 }
 
+void write_hdf5_double_vector(H5::H5File &outputf, const H5std_string &space_name, const std::vector<double> &data){
+    const double fill_value = 0.0;
+    H5::DSetCreatPropList plist;
+    plist.setFillValue(H5::PredType::NATIVE_DOUBLE, &fill_value);
+
+    hsize_t data_fdim[] ={(hsize_t)data.size()};
+    H5::DataSpace fspace = H5::DataSpace(1, data_fdim);
+
+    H5::DataSet h5_data(outputf.createDataSet(space_name, H5::PredType::NATIVE_DOUBLE, fspace, plist));
+
+    h5_data.write(data.data(), H5::PredType::NATIVE_DOUBLE);
+}
+
+void write_step_state(const std::string outputfn,
+                 const struct FCT_initialization::StepState &state) {
+
+  try {
+    H5::H5File outputf(outputfn.c_str(), H5F_ACC_TRUNC);
+
+
+    // Store state data
+    write_hdf5_double_vector(outputf, "u_state", state.u_state);
+    write_hdf5_double_vector(outputf, "flux_low", state.flux_low);
+    write_hdf5_double_vector(outputf, "flux_high", state.flux_high);
+    write_hdf5_double_vector(outputf, "adiff_flux", state.adiff_flux);
+    write_hdf5_double_vector(outputf, "flux_c", state.flux_c);
+  } catch (H5::FileIException error) {
+    error.printError();
+    exit(-1);
+  }
+}
+
 } // namespace FCT_output

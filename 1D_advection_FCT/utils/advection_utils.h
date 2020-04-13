@@ -40,6 +40,17 @@ struct InitState {
   std::vector<double> u;
 };
 
+struct StepState {
+    StepState(const size_t ndx);
+
+    size_t ndx;
+    std::vector<double> u_state;
+    std::vector<double> flux_low;
+    std::vector<double> flux_high;
+    std::vector<double> adiff_flux;
+    std::vector<double> flux_c;
+};
+
 void sine_init(InitState &state, const ProblemConfig &config,
                const double time);
 
