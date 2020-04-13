@@ -99,6 +99,8 @@ void do_computation(const FCT_initialization::ProblemConfig &config,
     // Copy relevant configs out of structs
     const double a_vel = config.a, dt = config.dt, dx = external_state.dx;
 
+    std::cout << a_vel << " " << dt << " " << dx << std::endl;
+
     for (unsigned int timestep = 0; timestep < config.ndt; ++timestep) {
       // Set BCs
       device_queue->submit([&](cl::sycl::handler &cgh) {
@@ -111,6 +113,7 @@ void do_computation(const FCT_initialization::ProblemConfig &config,
               acc_u[dst_index] = acc_u[src_index];
             });
       });
+      device_queue->wait_and_throw();
       // Compute fluxes
       device_queue->submit([&](cl::sycl::handler &cgh) {
         auto acc_u = u_state.get_access<cl::sycl::access::mode::read>(cgh);
@@ -131,6 +134,7 @@ void do_computation(const FCT_initialization::ProblemConfig &config,
                                   (1 - sigma_i) * acc_u[index + 2]);
         });
       });
+      device_queue->wait_and_throw();
       // Compute diff flux
       device_queue->submit([&](cl::sycl::handler &cgh) {
         auto acc_flux_low =
@@ -152,7 +156,7 @@ void do_computation(const FCT_initialization::ProblemConfig &config,
             core_state_size, [=](cl::sycl::id<1> index) {
               const double dtdx = (dt / dx);
               acc_u[index + 2] +=
-                  dtdx * (acc_flux_low[index] - acc_flux_low[index]);
+                  dtdx * (acc_flux_low[index] - acc_flux_low[index+1]);
             });
       });
       // Set BC cells
@@ -166,6 +170,7 @@ void do_computation(const FCT_initialization::ProblemConfig &config,
               acc_u[dst_index] = acc_u[src_index];
             });
       });
+      device_queue->wait_and_throw();
       // Calc FCT flux
       device_queue->submit([&](cl::sycl::handler &cgh) {
         auto acc_adiff_flux =
@@ -183,6 +188,7 @@ void do_computation(const FCT_initialization::ProblemConfig &config,
                                               abs(acc_adiff_flux[index])));
         });
       });
+      device_queue->wait_and_throw();
       // Do full update
       device_queue->submit([&](cl::sycl::handler &cgh) {
         auto acc_flux_c = flux_c.get_access<cl::sycl::access::mode::read>(cgh);
@@ -191,7 +197,7 @@ void do_computation(const FCT_initialization::ProblemConfig &config,
             core_state_size, [=](cl::sycl::id<1> index) {
               const double dtdx = (dt / dx);
               acc_u[index + 2] +=
-                  dtdx * (acc_flux_c[index] - acc_flux_c[index]);
+                  dtdx * (acc_flux_c[index] - acc_flux_c[index+1]);
             });
       });
       device_queue->wait_and_throw();
