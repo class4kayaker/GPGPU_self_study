@@ -7,9 +7,10 @@ const double PI = 3.141592653589793;
 
 ProblemConfig::ProblemConfig(const double a, const double sigma,
                              const double end_time, const std::string init_fn,
-                             const std::string end_fn)
+                             const std::string end_fn,
+                             const std::string device_name)
     : a(a), sigma(sigma), end_time(end_time), hdf5_init_fn(init_fn),
-      hdf5_end_fn(end_fn) {}
+      hdf5_end_fn(end_fn), device_name(device_name) {}
 
 void ProblemConfig::compute_timestep(const double curr_time, const double dx) {
   ndt = std::ceil(a * (end_time - curr_time) / (sigma * dx));
@@ -40,7 +41,8 @@ void print_config(const ProblemConfig &config) {
             << "  Sigma:    " << config.sigma << std::endl
             << "  End Time: " << config.end_time << std::endl
             << "  Init H5:  " << config.hdf5_init_fn << std::endl
-            << "  End H5:   " << config.hdf5_end_fn << std::endl;
+            << "  End H5:   " << config.hdf5_end_fn << std::endl
+            << "  Device:   " << config.device_name << std::endl;
 }
 
 struct ProblemConfig parse_args(int argc, char *argv[]) {
@@ -49,6 +51,7 @@ struct ProblemConfig parse_args(int argc, char *argv[]) {
   double end_time = 0.0;
   std::string init_h5_fn = "init_state.h5";
   std::string end_h5_fn = "end_state.h5";
+  std::string device_name = "";
 
   // Read command line arguments.
   for (int i = 0; i < argc; i++) {
@@ -71,6 +74,12 @@ struct ProblemConfig parse_args(int argc, char *argv[]) {
         exit(1);
       }
       end_time = atof(argv[++i]);
+    } else if ((strcmp(argv[i], "-dev") == 0)) {
+      if (i + 1 >= argc) {
+        std::cout << "  Value required for \"" << arg_i << "\"" << std::endl;
+        exit(1);
+      }
+      device_name = std::string(argv[++i]);
     } else if ((strcmp(argv[i], "-sigma") == 0)) {
       if (i + 1 >= argc) {
         std::cout << "  Value required for \"" << arg_i << "\"" << std::endl;
@@ -90,7 +99,8 @@ struct ProblemConfig parse_args(int argc, char *argv[]) {
     }
   }
 
-  struct ProblemConfig to_return(a, sigma, end_time, init_h5_fn, end_h5_fn);
+  struct ProblemConfig to_return(a, sigma, end_time, init_h5_fn, end_h5_fn,
+                                 device_name);
 
   print_config(to_return);
 

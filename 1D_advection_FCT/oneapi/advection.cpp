@@ -10,6 +10,7 @@
 #include "../utils/advection_utils.h"
 
 void do_computation(const FCT_initialization::ProblemConfig &,
+                    cl::sycl::device device_selected,
                     FCT_initialization::InitState &);
 
 int main(int argc, char *argv[]) {
@@ -24,9 +25,49 @@ int main(int argc, char *argv[]) {
 
   const int ndx = external_state.ndx;
 
+  unsigned int dev_sel = 0;
+
+  std::vector<cl::sycl::device> devices = cl::sycl::device::get_devices();
+
+  cl::sycl::default_selector backup_selector;
+  cl::sycl::device default_device = backup_selector.select_device();
+
+  std::cout << "Device List:" << std::endl;
+  unsigned int dev_i = 0;
+  for (const auto &dev : devices) {
+    const std::string dev_name = dev.get_info<cl::sycl::info::device::name>();
+    if (config.device_name == dev_name) {
+      dev_sel = dev_i + 1;
+    }
+    std::string dev_type;
+    if (dev.get_info<cl::sycl::info::device::device_type>() ==
+        cl::sycl::info::device_type::cpu) {
+      dev_type = "cpu";
+    } else if (dev.get_info<cl::sycl::info::device::device_type>() ==
+               cl::sycl::info::device_type::gpu) {
+      dev_type = "gpu";
+    } else if (dev.get_info<cl::sycl::info::device::device_type>() ==
+               cl::sycl::info::device_type::host) {
+      dev_type = "hst";
+    } else {
+      dev_type = "unk";
+    }
+    std::cout << "\t[" << dev_i + 1
+              << (dev_name == config.device_name ? "*" : " ") << "] ("
+              << dev_type << ") " << dev_name << std::endl;
+    ++dev_i;
+  }
+  if (config.device_name != "" && dev_sel ==0) {
+      std::cout << "Specified device " << config.device_name << " not found." << std::endl;
+      exit(-1);
+  }
+
+  cl::sycl::device device_selected =
+      dev_sel > 0 ? devices[dev_sel - 1] : default_device;
+
   // Do computation
   auto start = std::chrono::steady_clock::now();
-  { do_computation(config, external_state); }
+  { do_computation(config, device_selected, external_state); }
   auto end = std::chrono::steady_clock::now();
   auto time =
       (std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
@@ -52,6 +93,7 @@ class CalcFCTFLux;
 class FullUpdate;
 
 void do_computation(const FCT_initialization::ProblemConfig &config,
+                    cl::sycl::device device_selected,
                     FCT_initialization::InitState &external_state) {
   unsigned int ndx = external_state.ndx;
   std::vector<cl::sycl::cl_double> host_u_state(ndx + 4);
@@ -63,11 +105,22 @@ void do_computation(const FCT_initialization::ProblemConfig &config,
   cl::sycl::range<1> state_size{ndx + 4}, flux_size{ndx + 1},
       core_state_size{ndx};
 
-  cl::sycl::default_selector device_selector;
+  // cl::sycl::default_selector device_selector;
   std::unique_ptr<cl::sycl::queue> device_queue;
 
+  auto exception_handler = [](cl::sycl::exception_list exceptions) {
+    for (std::exception_ptr const &e : exceptions) {
+      try {
+        std::rethrow_exception(e);
+      } catch (sycl::exception const &e) {
+        std::cout << "Caught asynchronous SYCL exception:\n"
+                  << e.what() << std::endl;
+      }
+    }
+  };
+
   try {
-    device_queue.reset(new cl::sycl::queue(device_selector));
+    device_queue.reset(new cl::sycl::queue(device_selected, exception_handler));
   } catch (cl::sycl::exception const &e) {
     std::cout << "Caught a synchronous SYCL exception:" << std::endl
               << e.what() << std::endl;
