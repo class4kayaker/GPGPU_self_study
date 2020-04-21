@@ -8,12 +8,9 @@
 #include "../utils/advection_output.h"
 
 int main(int argc, char *argv[]) {
-  double end_time = 0.0;
-  const double sigma = 0.9;
-  const double a = 3.0;
+  const auto input_config = FCT_initialization::get_config_from_cli(argc, argv);
 
-  FCT_initialization::ProblemConfig config =
-      FCT_initialization::parse_args(argc, argv);
+  FCT_initialization::ProblemConfig config = FCT_initialization::init_from_toml(input_config);
 
   struct FCT_initialization::InitState init;
 

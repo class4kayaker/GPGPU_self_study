@@ -16,7 +16,7 @@ namespace FCT_initialization {
 
 struct ProblemConfig {
   ProblemConfig(const double a, const double sigma, const double end_time,
-                const std::string init_fn, const std::string end_fn, const std::string device_name);
+                const std::string init_fn, const std::string end_fn);
 
   void compute_timestep(const double curr_time, const double dx);
 
@@ -25,7 +25,6 @@ struct ProblemConfig {
   const std::string hdf5_init_fn;
   const double end_time;
   const std::string hdf5_end_fn;
-  const std::string device_name;
 
   // Derived values
   int ndt;

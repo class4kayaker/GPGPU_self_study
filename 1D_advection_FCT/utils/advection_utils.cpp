@@ -7,10 +7,9 @@ const double PI = 3.141592653589793;
 
 ProblemConfig::ProblemConfig(const double a, const double sigma,
                              const double end_time, const std::string init_fn,
-                             const std::string end_fn,
-                             const std::string device_name)
+                             const std::string end_fn)
     : a(a), sigma(sigma), end_time(end_time), hdf5_init_fn(init_fn),
-      hdf5_end_fn(end_fn), device_name(device_name) {}
+      hdf5_end_fn(end_fn) {}
 
 void ProblemConfig::compute_timestep(const double curr_time, const double dx) {
   ndt = std::ceil(a * (end_time - curr_time) / (sigma * dx));
@@ -41,8 +40,7 @@ void print_config(const ProblemConfig &config) {
             << "  Sigma:    " << config.sigma << std::endl
             << "  End Time: " << config.end_time << std::endl
             << "  Init H5:  " << config.hdf5_init_fn << std::endl
-            << "  End H5:   " << config.hdf5_end_fn << std::endl
-            << "  Device:   " << config.device_name << std::endl;
+            << "  End H5:   " << config.hdf5_end_fn << std::endl;
 }
 
 struct ProblemConfig parse_args(int argc, char *argv[]) {
@@ -99,8 +97,7 @@ struct ProblemConfig parse_args(int argc, char *argv[]) {
     }
   }
 
-  struct ProblemConfig to_return(a, sigma, end_time, init_h5_fn, end_h5_fn,
-                                 device_name);
+  struct ProblemConfig to_return(a, sigma, end_time, init_h5_fn, end_h5_fn);
 
   print_config(to_return);
 
@@ -121,18 +118,31 @@ const toml::value get_config_from_cli(int argc, char *argv[]) {
   return toml::parse(config_fn);
 }
 
+template <typename T> T toml_get_or_default(toml::value file_value, T other) {
+  if (file_value.is_uninitialized()) {
+    return other;
+  } else {
+    return toml::get<T>(file_value);
+  }
+}
+
+template double toml_get_or_default<double>(toml::value file_value,
+                                            double other);
+template std::string toml_get_or_default<std::string>(toml::value file_value,
+                                                      std::string other);
+
 struct ProblemConfig init_from_toml(const toml::value input_data) {
-  const double a = toml::find<double>(input_data, "Velocity");
-  const double sigma = toml::find<double>(input_data, "CFL number");
+  const double a = toml_get_or_default<double>(
+      toml::find(input_data, "Velocity"), 3.0);
+  const double sigma = toml_get_or_default<double>(
+      toml::find(input_data, "CFL number"), 0.9);
   const double end_time = toml::find<double>(input_data, "End time");
   const std::string init_h5_fn =
       toml::find<std::string>(input_data, "Init file");
-  const std::string end_h5_fn =
-      toml::find<std::string>(input_data, "Output file");
-  const std::string device_name = toml::find<std::string>(input_data, "Device");
+  const std::string end_h5_fn = toml_get_or_default<std::string>(
+      toml::find(input_data, "Output file"), "output.h5");
 
-  struct ProblemConfig to_return(a, sigma, end_time, init_h5_fn, end_h5_fn,
-                                 device_name);
+  struct ProblemConfig to_return(a, sigma, end_time, init_h5_fn, end_h5_fn);
 
   print_config(to_return);
 

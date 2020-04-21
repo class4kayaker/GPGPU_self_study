@@ -16,7 +16,10 @@ void do_computation(const FCT_initialization::ProblemConfig &,
 int main(int argc, char *argv[]) {
   const auto input_config = FCT_initialization::get_config_from_cli(argc, argv);
 
-  FCT_initialization::ProblemConfig config = FCT_initialization::init_from_toml(input_config);
+  FCT_initialization::ProblemConfig config =
+      FCT_initialization::init_from_toml(input_config);
+
+  const std::string sel_device_name = toml::find_or(input_config, "Device", "");
 
   FCT_initialization::InitState external_state;
 
@@ -26,45 +29,47 @@ int main(int argc, char *argv[]) {
 
   const int ndx = external_state.ndx;
 
-  unsigned int dev_sel = 0;
+  cl::sycl::device device_selected;
+  {
+    unsigned int dev_sel = 0;
+    std::vector<cl::sycl::device> devices = cl::sycl::device::get_devices();
 
-  std::vector<cl::sycl::device> devices = cl::sycl::device::get_devices();
+    cl::sycl::default_selector backup_selector;
+    cl::sycl::device default_device = backup_selector.select_device();
+    const std::string default_device_name =
+        default_device.get_info<cl::sycl::info::device::name>();
 
-  cl::sycl::default_selector backup_selector;
-  cl::sycl::device default_device = backup_selector.select_device();
-
-  std::cout << "Device List:" << std::endl;
-  unsigned int dev_i = 0;
-  for (const auto &dev : devices) {
-    const std::string dev_name = dev.get_info<cl::sycl::info::device::name>();
-    if (config.device_name == dev_name) {
-      dev_sel = dev_i + 1;
+    std::cout << "Device List:" << std::endl;
+    unsigned int dev_i = 0;
+    for (const auto &dev : devices) {
+      const std::string dev_name = dev.get_info<cl::sycl::info::device::name>();
+      if (sel_device_name == dev_name) {
+        dev_sel = dev_i + 1;
+      }
+      std::string dev_type;
+      auto d_type_var = dev.get_info<cl::sycl::info::device::device_type>();
+      if (d_type_var == cl::sycl::info::device_type::cpu) {
+        dev_type = "cpu";
+      } else if (d_type_var == cl::sycl::info::device_type::gpu) {
+        dev_type = "gpu";
+      } else if (d_type_var == cl::sycl::info::device_type::host) {
+        dev_type = "hst";
+      } else {
+        dev_type = "unk";
+      }
+      std::cout << "\t[" << dev_i + 1
+                << (dev_name == sel_device_name ? "*" : " ")
+                << (dev_name == default_device_name ? "*" : " ") << "] ("
+                << dev_type << ") " << dev_name << std::endl;
+      ++dev_i;
     }
-    std::string dev_type;
-    if (dev.get_info<cl::sycl::info::device::device_type>() ==
-        cl::sycl::info::device_type::cpu) {
-      dev_type = "cpu";
-    } else if (dev.get_info<cl::sycl::info::device::device_type>() ==
-               cl::sycl::info::device_type::gpu) {
-      dev_type = "gpu";
-    } else if (dev.get_info<cl::sycl::info::device::device_type>() ==
-               cl::sycl::info::device_type::host) {
-      dev_type = "hst";
-    } else {
-      dev_type = "unk";
-    }
-    std::cout << "\t[" << dev_i + 1
-              << (dev_name == config.device_name ? "*" : " ") << "] ("
-              << dev_type << ") " << dev_name << std::endl;
-    ++dev_i;
-  }
-  if (config.device_name != "" && dev_sel ==0) {
-      std::cout << "Specified device " << config.device_name << " not found." << std::endl;
+    if (sel_device_name != "" && dev_sel == 0) {
+      std::cout << "Specified device " << sel_device_name << " not found."
+                << std::endl;
       exit(-1);
+    }
+    device_selected = dev_sel > 0 ? devices[dev_sel - 1] : default_device;
   }
-
-  cl::sycl::device device_selected =
-      dev_sel > 0 ? devices[dev_sel - 1] : default_device;
 
   // Do computation
   auto start = std::chrono::steady_clock::now();
