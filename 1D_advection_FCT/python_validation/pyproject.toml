@@ -12,6 +12,7 @@ requires-python = "~=3.6"
 requires = [
     "numpy",
     "h5py",
+    "tomlkit",
 ]
 
 [tool.flit.entrypoints."console_scripts"]

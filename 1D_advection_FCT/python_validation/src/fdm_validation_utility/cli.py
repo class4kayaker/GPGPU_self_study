@@ -1,5 +1,6 @@
 import sys
 import argparse
+import tomlkit
 
 from fdm_validation_utility import (
     FDM_Problem_Config,
@@ -25,14 +26,10 @@ def calculate_error(args):
 
 
 def convergence(args):
+    with open(args.base_toml) as f:
+        base_toml = tomlkit.parse(f.read())
     convergence_test(
-        args.executable,
-        args.init,
-        args.vel,
-        args.sigma,
-        args.time,
-        args.kstart,
-        args.kend,
+        args.executable, args.init, base_toml, args.kstart, args.kend,
     )
 
 
@@ -109,20 +106,10 @@ def parse_args(args):
         "convergence", description="Utility to run a standard convergence test"
     )
 
-    convergence_parser.add_argument(
-        "executable", help="Executable to test"
-    )
+    convergence_parser.add_argument("executable", help="Executable to test")
 
     convergence_parser.add_argument(
-        "--vel", type=float, default=3.0, help="Advection velocity"
-    )
-
-    convergence_parser.add_argument(
-        "--sigma", type=float, default=0.9, help="CFL number"
-    )
-
-    convergence_parser.add_argument(
-        "--time", type=float, default=0.0, help="Comparison Time",
+        "base_toml", help="Base configuration file"
     )
 
     convergence_parser.add_argument(
@@ -132,13 +119,9 @@ def parse_args(args):
         help="Name of initial state to generate",
     )
 
-    convergence_parser.add_argument(
-        "--kstart", type=int, default=3
-    )
+    convergence_parser.add_argument("--kstart", type=int, default=3)
 
-    convergence_parser.add_argument(
-        "--kend", type=int, default=7
-    )
+    convergence_parser.add_argument("--kend", type=int, default=7)
 
     convergence_parser.set_defaults(utilname="CONVERGENCE")
 

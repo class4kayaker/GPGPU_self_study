@@ -2,29 +2,39 @@ import timeit
 import numpy
 import subprocess
 import tempfile
+import tomlkit
 from pathlib import Path
 
 from fdm_validation_utility import (
-    FDM_Problem_Config,
     FDM_Advection_State,
     FDM_Error,
     init_by_name,
 )
 
+from .toml_utils import problem_config_from_toml
 
-def calculate_run_error(executable, initname, config, ndx):
+
+def calculate_run_error(executable, initname, config_base, ndx):
+    config = problem_config_from_toml(config_base)
+    config_dat = config_base.copy()
     with tempfile.TemporaryDirectory() as tmpdirname:
         tmpdirpath = Path(tmpdirname)
         initfilepath = tmpdirpath / "init.h5"
         endfilepath = tmpdirpath / "end.h5"
+        config_path = tmpdirpath / "config.toml"
+
         init_state = init_by_name[initname](config, ndx, time=0.0)
         init_state.to_h5(initfilepath)
+
+        config_dat["Init file"] = str(initfilepath)
+        config_dat["Output file"] = str(endfilepath)
+
         tic = timeit.default_timer()
-        subprocess.check_call(
-            [executable, "-I", str(initfilepath), "-O", str(endfilepath)]
-            + config.cli_args()
-        )
+        with config_path.open("w") as f:
+            f.write(tomlkit.dumps(config_dat))
+        subprocess.check_call([executable, str(config_path)])
         toc = timeit.default_timer()
+
         run_time = toc - tic
         end_true = init_by_name[initname](config, ndx, time=config.end_time)
         end_computed = FDM_Advection_State.from_h5(endfilepath)
@@ -45,15 +55,17 @@ convergence_data_dtype = [
 ]
 
 
-def convergence_runs(executable, initname, config, kstart, kend):
+def convergence_runs(executable, initname, config_base, kstart, kend):
     err_data = numpy.ndarray((kend - kstart,), dtype=convergence_data_dtype)
     for norm in ["L1", "L2", "LI"]:
-        err_data[norm+"_rate"] = numpy.nan
+        err_data[norm + "_rate"] = numpy.nan
     err_data["t_rate"] = numpy.nan
     for i, k in enumerate(range(kstart, kend)):
         ndx = 2 ** k
         err_data["ndx"][i] = ndx
-        error, runtime = calculate_run_error(executable, initname, config, ndx)
+        error, runtime = calculate_run_error(
+            executable, initname, config_base, ndx
+        )
         err_data["dx"][i] = error.computed.dx
         err_data["L1_err"][i] = error.L1_err()
         err_data["L2_err"][i] = error.L2_err()
@@ -114,8 +126,6 @@ def pprint_convergence(data):
         print(fmt_row.format(r=r))
 
 
-def convergence_test(executable, initname, a, sigma, end_time, kstart, kend):
-    config = FDM_Problem_Config(a, sigma, end_time)
-
-    data = convergence_runs(executable, initname, config, kstart, kend)
+def convergence_test(executable, initname, config_base, kstart, kend):
+    data = convergence_runs(executable, initname, config_base, kstart, kend)
     pprint_convergence(data)

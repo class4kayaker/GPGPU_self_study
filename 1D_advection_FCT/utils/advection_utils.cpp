@@ -106,4 +106,36 @@ struct ProblemConfig parse_args(int argc, char *argv[]) {
 
   return to_return;
 }
+
+const toml::value get_config_from_cli(int argc, char *argv[]) {
+
+  if (argc != 2) {
+    std::cout << "More than one argument provided, only path to config file "
+                 "should be included."
+              << std::endl;
+    exit(1);
+  }
+
+  const std::string config_fn = argv[1];
+
+  return toml::parse(config_fn);
+}
+
+struct ProblemConfig init_from_toml(const toml::value input_data) {
+  const double a = toml::find<double>(input_data, "Velocity");
+  const double sigma = toml::find<double>(input_data, "CFL number");
+  const double end_time = toml::find<double>(input_data, "End time");
+  const std::string init_h5_fn =
+      toml::find<std::string>(input_data, "Init file");
+  const std::string end_h5_fn =
+      toml::find<std::string>(input_data, "Output file");
+  const std::string device_name = toml::find<std::string>(input_data, "Device");
+
+  struct ProblemConfig to_return(a, sigma, end_time, init_h5_fn, end_h5_fn,
+                                 device_name);
+
+  print_config(to_return);
+
+  return to_return;
+}
 } // namespace FCT_initialization

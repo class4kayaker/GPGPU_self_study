@@ -10,6 +10,7 @@
 #include <math.h>
 #include <string>
 #include <vector>
+#include "toml11/toml.hpp"
 
 namespace FCT_initialization {
 
@@ -56,6 +57,9 @@ void sine_init(InitState &state, const ProblemConfig &config,
                const double time);
 
 struct ProblemConfig parse_args(int argc, char *argv[]);
+
+const toml::value get_config_from_cli(int argc, char *argv[]);
+struct ProblemConfig init_from_toml(const toml::value input_data);
 } // namespace FCT_initialization
 
 #endif
