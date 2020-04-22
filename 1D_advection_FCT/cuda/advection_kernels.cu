@@ -1,5 +1,7 @@
 #include "advection_alloc.h"
 
+#include <stdio.h>
+
 __global__ void set_periodic_bc(size_t ndx, double *u) {
   const size_t index = threadIdx.x;
   const size_t dst_index = index < 2 ? index : ndx + index;
@@ -86,7 +88,7 @@ void cuda_compute_fct(size_t ndx, double *u_extern, size_t ndt, double dt,
       // Compute fluxes
       calc_low_flux<<<flx_block_count, block_size>>>(ndx, a, u_state, flux_low);
       calc_high_flux<<<flx_block_count, block_size>>>(ndx, a, dx, dt, u_state,
-                                                      flux_low);
+                                                      flux_high);
       cudaDeviceSynchronize();
       // Compute diff flux
       calc_diff_flux<<<flx_block_count, block_size>>>(ndx, flux_low, flux_high,
@@ -100,8 +102,8 @@ void cuda_compute_fct(size_t ndx, double *u_extern, size_t ndt, double dt,
       set_periodic_bc<<<1, block_size>>>(ndx, u_state);
       cudaDeviceSynchronize();
       // Calc FCT flux
-      calc_fct_flux<<<flx_block_count, block_size>>>(
-          ndx, a, dt, dx, adiff_flux, u_state, flux_c);
+      calc_fct_flux<<<flx_block_count, block_size>>>(ndx, a, dt, dx, adiff_flux,
+                                                     u_state, flux_c);
       cudaDeviceSynchronize();
       // Do full update
       do_update<<<state_block_count, block_size>>>(ndx, dt, dx, flux_c,
