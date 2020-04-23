@@ -33,6 +33,13 @@ def convergence(args):
     )
 
 
+def diff_output(args):
+    state1 = FDM_Advection_State.from_h5(args.file1)
+    state2 = FDM_Advection_State.from_h5(args.file2)
+    diff = FDM_Error(state1, state2)
+    print(diff.pprint_string())
+
+
 def parse_args(args):
     parser = argparse.ArgumentParser(
         description="Utility to aid in validating FCT implementations"
@@ -48,10 +55,6 @@ def parse_args(args):
 
     init_create_parser.add_argument(
         "--vel", type=float, default=3.0, help="Advection velocity"
-    )
-
-    init_create_parser.add_argument(
-        "--sigma", type=float, default=0.9, help="CFL number"
     )
 
     init_create_parser.add_argument(
@@ -102,6 +105,16 @@ def parse_args(args):
 
     error_parser.set_defaults(utilname="ERROR")
 
+    diff_parser = subparsers.add_parser(
+        "diff", description="Compare two output files"
+    )
+
+    diff_parser.add_argument("file1", help="File 1")
+
+    diff_parser.add_argument("file2", help="File 2")
+
+    diff_parser.set_defaults(utilname="DIFF")
+
     convergence_parser = subparsers.add_parser(
         "convergence", description="Utility to run a standard convergence test"
     )
@@ -136,3 +149,5 @@ def main():
         calculate_error(parsed_args)
     elif parsed_args.utilname == "CONVERGENCE":
         convergence(parsed_args)
+    elif parsed_args.utilname == "DIFF":
+        diff_output(parsed_args)
