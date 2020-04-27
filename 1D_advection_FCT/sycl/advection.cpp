@@ -119,7 +119,7 @@ void do_computation(const FCT_initialization::ProblemConfig &config,
     for (std::exception_ptr const &e : exceptions) {
       try {
         std::rethrow_exception(e);
-      } catch (sycl::exception const &e) {
+      } catch (cl::sycl::exception const &e) {
         std::cout << "Caught asynchronous SYCL exception:\n"
                   << e.what() << std::endl;
       }
