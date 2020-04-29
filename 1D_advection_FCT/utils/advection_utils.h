@@ -15,16 +15,17 @@
 namespace FCT_initialization {
 
 struct ProblemConfig {
+  ProblemConfig();
   ProblemConfig(const double a, const double sigma, const double end_time,
                 const std::string init_fn, const std::string end_fn);
 
   void compute_timestep(const double curr_time, const double dx);
 
-  const double a;
-  const double sigma;
-  const std::string hdf5_init_fn;
-  const double end_time;
-  const std::string hdf5_end_fn;
+  double a;
+  double sigma;
+  std::string hdf5_init_fn;
+  double end_time;
+  std::string hdf5_end_fn;
 
   // Derived values
   int ndt;

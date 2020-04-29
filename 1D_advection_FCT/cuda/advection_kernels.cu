@@ -60,9 +60,8 @@ __global__ void calc_fct_flux(size_t ndx, double a, double dx, double dt,
   }
 }
 
-void cuda_compute_fct(size_t ndx, double *u_extern, size_t ndt, double dt,
+void cuda_compute_fct(size_t ndx, size_t block_size, double *u_extern, size_t ndt, double dt,
                       double dx, double a) {
-  const size_t block_size = 256;
   const size_t state_size = (ndx + 4) * sizeof(double),
                flux_size = (ndx + 1) * sizeof(double);
   double *u_state, *flux_low, *flux_high, *adiff_flux, *flux_c;

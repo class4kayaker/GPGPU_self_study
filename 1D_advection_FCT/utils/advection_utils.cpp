@@ -5,6 +5,9 @@
 namespace FCT_initialization {
 const double PI = 3.141592653589793;
 
+ProblemConfig::ProblemConfig()
+    : a(3.0), sigma(0.9), end_time(0.0), hdf5_init_fn(""), hdf5_end_fn("") {}
+
 ProblemConfig::ProblemConfig(const double a, const double sigma,
                              const double end_time, const std::string init_fn,
                              const std::string end_fn)
@@ -132,10 +135,10 @@ template std::string toml_get_or_default<std::string>(toml::value file_value,
                                                       std::string other);
 
 struct ProblemConfig init_from_toml(const toml::value input_data) {
-  const double a = toml_get_or_default<double>(
-      toml::find(input_data, "Velocity"), 3.0);
-  const double sigma = toml_get_or_default<double>(
-      toml::find(input_data, "CFL number"), 0.9);
+  const double a =
+      toml_get_or_default<double>(toml::find(input_data, "Velocity"), 3.0);
+  const double sigma =
+      toml_get_or_default<double>(toml::find(input_data, "CFL number"), 0.9);
   const double end_time = toml::find<double>(input_data, "End time");
   const std::string init_h5_fn =
       toml::find<std::string>(input_data, "Init file");
