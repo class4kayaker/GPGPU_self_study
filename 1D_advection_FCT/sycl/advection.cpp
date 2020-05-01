@@ -264,8 +264,8 @@ void do_computation(const FCT_initialization::ProblemConfig &config,
                   dtdx * (acc_flux_c[index] - acc_flux_c[index + 1]);
             });
       });
+      device_queue->wait_and_throw();
     }
-    device_queue->wait_and_throw();
   }
 
   external_state.time = config.end_time;
