@@ -12,7 +12,7 @@ from fdm_validation_utility import (
 
 
 def generate_init(args):
-    config = FDM_Problem_Config(args.vel, args.sigma)
+    config = FDM_Problem_Config(args.vel)
     init_cond = init_by_name[args.init](config, args.ndx, args.time)
     init_cond.to_h5(args.output)
 
