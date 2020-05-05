@@ -25,3 +25,12 @@
         name:
           - intel-basekit
           - intel-hpckit
+        state: present
+    - name: Create activation script
+      copy:
+        dest: "~/.local/bin/activate-oneapi-env.sh"
+        mode: 0700
+        content: |
+            #!/bin/bash
+            source /opt/intel/inteloneapi/setvars.sh
+            exec $SHELL
