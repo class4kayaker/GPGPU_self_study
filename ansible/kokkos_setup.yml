@@ -1,0 +1,37 @@
+# ansible-playbook -K %s
+---
+-
+  hosts:
+      localhost
+  connection: local
+  tasks:
+    - name: Create directories
+      file:
+        path: "{{item.path}}"
+        state: directory
+      with_items:
+        - { path: "~/opt/Sci" }
+        - { path: "~/opt/Src_Repos/" }
+    - name: Get kokkos
+      git:
+        accept_hostkey: yes
+        repo: https://github.com/kokkos/kokkos
+        dest: ~/opt/Src_Repos/kokkos
+    # Setup instructions
+    - name: Create directories
+      file:
+        path: "{{item.path}}"
+        state: directory
+      with_items:
+        - { path: "~/opt/Src_Repos/kokkos/build" }
+    - name: Do configure
+      shell:
+        chdir: ~/opt/Src_Repos/kokkos/build
+        cmd: |
+          cmake ~/opt/Src_Repos/kokkos \
+          -DCMAKE_INSTALL_PREFIX=~/opt/Sci/Kokkos \
+          -DKokkos_ENABLE_OPENMP=On \
+    - name: Build and install
+      shell:
+        chdir: ~/opt/Src_Repos/kokkos/build
+        cmd: make install

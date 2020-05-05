@@ -49,7 +49,7 @@ void write_state(const std::string outputfn,
       state_data.write(state.u.data(), H5::PredType::NATIVE_DOUBLE);
     }
   } catch (H5::FileIException error) {
-    error.printError();
+    error.printErrorStack();
     exit(-1);
   }
 }
@@ -101,7 +101,7 @@ void read_state(const std::string inputfn,
     }
     delete[] u;
   } catch (H5::FileIException error) {
-    error.printError();
+    error.printErrorStack();
     exit(-1);
   }
 }
@@ -133,7 +133,7 @@ void write_step_state(const std::string outputfn,
     write_hdf5_double_vector(outputf, "adiff_flux", state.adiff_flux);
     write_hdf5_double_vector(outputf, "flux_c", state.flux_c);
   } catch (H5::FileIException error) {
-    error.printError();
+    error.printErrorStack();
     exit(-1);
   }
 }
