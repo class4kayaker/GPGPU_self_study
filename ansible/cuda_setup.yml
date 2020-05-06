@@ -1,0 +1,22 @@
+# ansible-playbook -K %s
+---
+-
+  hosts:
+      localhost
+  connection: local
+  tasks:
+    - name: Create repo ref
+      become: yes
+      when: ansible_facts['distribution'] == "Fedora"
+      get_url:
+        dest: "/etc/yum.repos.d/cuda-fedora29.repo"
+        mode: 0644
+        url: https://developer.download.nvidia.com/compute/cuda/repos/fedora29/x86_64/cuda-fedora29.repo
+    - name: Install Cuda
+      become: yes
+      when: ansible_facts['distribution'] == "Fedora"
+      dnf:
+        name:
+          - cuda
+          - cuda-drivers
+        state: present

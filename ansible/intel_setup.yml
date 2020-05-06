@@ -1,0 +1,36 @@
+# ansible-playbook -K %s
+---
+-
+  hosts:
+      localhost
+  connection: local
+  tasks:
+    - name: Create repo ref
+      become: yes
+      when: ansible_facts['distribution'] == "Fedora"
+      copy:
+        dest: "/etc/yum.repos.d/oneAPI.repo"
+        content: |
+          [oneAPI]
+          name=Intel(R) oneAPI repository
+          baseurl=https://yum.repos.intel.com/oneapi
+          enabled=1
+          gpgcheck=1
+          repo_gpgcheck=1
+          gpgkey=https://yum.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS-2023.PUB
+    - name: Install Intel oneAPI
+      become: yes
+      when: ansible_facts['distribution'] == "Fedora"
+      dnf:
+        name:
+          - intel-basekit
+          - intel-hpckit
+        state: present
+    - name: Create activation script
+      copy:
+        dest: "~/.local/bin/activate-oneapi-env.sh"
+        mode: 0700
+        content: |
+            #!/bin/bash
+            source /opt/intel/inteloneapi/setvars.sh
+            exec $SHELL
