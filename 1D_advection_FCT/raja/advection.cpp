@@ -57,8 +57,8 @@ int main(int argc, char *argv[]) {
 void do_computation(const FCT_initialization::ProblemConfig &config,
                     const DeviceConfig &d_config,
                     FCT_initialization::InitState &external_state) {
-  typedef RAJA::seq_exec ExecSpace;
-  // typedef RAJA::loop_exec ExecSpace;
+  // typedef RAJA::seq_exec ExecSpace;
+  typedef RAJA::loop_exec ExecSpace;
 
   unsigned int ndx = external_state.ndx;
   double *u_state = new double[ndx + 4];
