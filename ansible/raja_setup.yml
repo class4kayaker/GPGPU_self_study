@@ -1,0 +1,36 @@
+# ansible-playbook -K %s
+---
+-
+  hosts:
+      localhost
+  connection: local
+  tasks:
+    - name: Create directories
+      file:
+        path: "{{item.path}}"
+        state: directory
+      with_items:
+        - { path: "~/opt/Sci" }
+        - { path: "~/opt/Src_Repos/" }
+    - name: Get kokkos
+      git:
+        accept_hostkey: yes
+        repo: https://github.com/llnl/raja.git
+        dest: ~/opt/Src_Repos/raja
+    # Setup instructions
+    - name: Create directories
+      file:
+        path: "{{item.path}}"
+        state: directory
+      with_items:
+        - { path: "~/opt/Src_Repos/raja/build" }
+    - name: Do configure
+      shell:
+        chdir: ~/opt/Src_Repos/raja/build
+        cmd: |
+          cmake ~/opt/Src_Repos/raja \
+          -DCMAKE_INSTALL_PREFIX=~/opt/Sci/Raja
+    - name: Build and install
+      shell:
+        chdir: ~/opt/Src_Repos/raja/build
+        cmd: make install

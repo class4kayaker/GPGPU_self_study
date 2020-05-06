@@ -11,7 +11,6 @@
 #include "../utils/advection_utils.h"
 
 struct DeviceConfig {
-  std::string device_name;
 };
 
 void do_computation(const FCT_initialization::ProblemConfig &,
@@ -25,9 +24,6 @@ int main(int argc, char *argv[]) {
         FCT_initialization::get_config_from_cli(argc, argv);
 
     config = FCT_initialization::init_from_toml(input_config);
-
-    const auto dev_table = toml::find(input_config, "Device");
-    d_config.device_name = toml::find_or<std::string>(dev_table, "Name", "");
   }
 
   FCT_initialization::InitState external_state;
