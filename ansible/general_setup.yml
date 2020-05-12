@@ -1,0 +1,16 @@
+
+# ansible-playbook -K %s
+---
+-
+  hosts:
+      localhost
+  connection: local
+  tasks:
+    - name: Install general packages
+      become: yes
+      when: ansible_facts['distribution'] == "Fedora"
+      dnf:
+        name:
+          - gcc-c++
+          - hdf5-devel
+        state: present
