@@ -60,8 +60,46 @@ __global__ void calc_fct_flux(size_t ndx, double a, double dx, double dt,
   }
 }
 
-void cuda_compute_fct(size_t ndx, size_t block_size, double *u_extern, size_t ndt, double dt,
-                      double dx, double a) {
+void cuda_compute_fct(const char *device_name, size_t ndx, size_t block_size,
+                      double *u_extern, size_t ndt, double dt, double dx,
+                      double a) {
+
+  int default_device = 0;
+  struct cudaDeviceProp properties;
+  cudaError_t err;
+  err = cudaGetDevice(&default_device);
+  if (err != cudaSuccess)
+    printf("%s\n", cudaGetErrorString(err));
+  int sel_device = default_device;
+  int n_dev;
+  err = cudaGetDeviceCount(&n_dev);
+  if (err != cudaSuccess)
+    printf("%s\n", cudaGetErrorString(err));
+  printf("Device List:\n");
+  for (int dev_i = 0; dev_i < n_dev; ++dev_i) {
+    char d_device = ' ', s_device = ' ';
+    err = cudaGetDeviceProperties(&properties, dev_i);
+    if (err != cudaSuccess)
+      printf("%s\n", cudaGetErrorString(err));
+    if (default_device == dev_i) {
+      d_device = 'D';
+    }
+    if (!strcmp(device_name, properties.name)) {
+      s_device = '*';
+      sel_device = dev_i;
+    }
+    printf("\t[%d%c%c] %s\n", dev_i + 1, s_device, d_device, properties.name);
+  }
+  err = cudaSetDevice(sel_device);
+  if (err != cudaSuccess)
+    printf("%s\n", cudaGetErrorString(err));
+
+  err = cudaGetDeviceProperties(&properties, sel_device);
+  if (err != cudaSuccess)
+    printf("%s\n", cudaGetErrorString(err));
+
+  printf("Device: %s\n", properties.name);
+
   const size_t state_size = (ndx + 4) * sizeof(double),
                flux_size = (ndx + 1) * sizeof(double);
   double *u_state, *flux_low, *flux_high, *adiff_flux, *flux_c;
