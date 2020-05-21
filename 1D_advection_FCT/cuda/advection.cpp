@@ -60,12 +60,11 @@ void do_computation(const FCT_initialization::ProblemConfig &config,
                     const DeviceConfig &d_config,
                     FCT_initialization::InitState &external_state) {
 
-    // Cuda device selection from in program is currently inconsistent with
-    // documented approach to some extent
+  // Device selection must be in cuda file
 
-  cuda_compute_fct(external_state.ndx, d_config.block_size,
-                   external_state.u.data(), config.ndt, config.dt,
-                   external_state.dx, config.a);
+  cuda_compute_fct(d_config.device_name.c_str(), external_state.ndx,
+                   d_config.block_size, external_state.u.data(), config.ndt,
+                   config.dt, external_state.dx, config.a);
 
   external_state.time = config.end_time;
 }
