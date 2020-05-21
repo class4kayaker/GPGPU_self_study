@@ -20,3 +20,8 @@
           - cuda
           - cuda-drivers
         state: present
+
+# dnf copr enable kiwizart/cuda-gcc-10.1
+# dnf install cuda-gcc cuda-gcc-c++
+# # For fedora32 at least
+# ln -s /usr/lib64/libmpfr.so.6 /usr/lib64/libmpfr.so.4
