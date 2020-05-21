@@ -12,7 +12,7 @@
       with_items:
         - { path: "~/opt/Sci" }
         - { path: "~/opt/Src_Repos/" }
-    - name: Get kokkos
+    - name: Get RAJA
       git:
         accept_hostkey: yes
         repo: https://github.com/llnl/raja.git
