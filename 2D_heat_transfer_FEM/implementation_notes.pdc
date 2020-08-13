@@ -1,0 +1,34 @@
+---
+title: "2D Heat Transfer Mini-app Notes"
+author: "Jonathan Robey"
+---
+
+### Mathematical Notes
+
+The appropriate derivative form for this problem will be
+
+$$\frac{\partial T}{\partial t} -\nabla (k\nabla T) =f$$
+
+#### Static case
+
+As an initial case, we will focus on the case where $T$ is static, so
+
+$$-\nabla (k\nabla T) =f$$
+
+To discretize, consider the test function set $\phi_i$ and let $T_h=\sum\limits_i T_i\phi_i$.
+
+$$-\nabla (k\nabla (T_i\phi_i))\phi_j=f\phi_j$$
+
+$$\int\limits_\Omega-\nabla (k\nabla (T_i\phi_i))\phi_jd\vec{x}=\int\limits_\Omega f\phi_j d\vec{x}$$
+
+$$\int\limits_\Omega(k\nabla (T_i\phi_i))\cdot\nabla\phi_j d\vec{x}-\int\limits_{\partial \Omega}(k\nabla (T_i\phi_i)\cdot\vec{n})phi_jd\vec{x}=\int\limits_\Omega f\phi_j d\vec{x}$$
+
+$$\int\limits_\Omega kT_i\nabla \phi_i\cdot\nabla\phi_j d\vec{x}-\int\limits_{\partial \Omega}kT_i\nabla \phi_i\cdot\vec{n}phi_jd\vec{x}=\int\limits_\Omega f\phi_j d\vec{x}$$
+
+We note that because the boundary term will, in implementation be either 0 or on the RHS, this results in a symmetric positive definite matrix equation.
+
+#### Dynamic case
+
+$$\int\limits_\Omega \frac{\partial T_i}{\partial t} \phi_i\phi_j + kT_i\nabla \phi_i\cdot\nabla\phi_j d\vec{x}-\int\limits_{\partial \Omega}kT_i\nabla \phi_i\cdot\vec{n}phi_jd\vec{x}=\int\limits_\Omega f\phi_j d\vec{x}$$
+
+$$\frac{\partial T_i}{\partial t}\int\limits_\Omega \phi_i\phi_jd\vec{x} +\int\limits_\Omega kT_i\nabla \phi_i\cdot\nabla\phi_j d\vec{x}-\int\limits_{\partial \Omega}kT_i\nabla \phi_i\cdot\vec{n}phi_jd\vec{x}=\int\limits_\Omega f\phi_j d\vec{x}$$

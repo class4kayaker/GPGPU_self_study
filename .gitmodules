@@ -1,3 +1,3 @@
 [submodule "1D_advection_FCT/utils/toml11"]
-	path = 1D_advection_FCT/utils/toml11
+	path = utils/toml11
 	url = https://github.com/ToruNiina/toml11.git
