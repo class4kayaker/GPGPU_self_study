@@ -54,9 +54,10 @@ void do_computation(const FCT_initialization::ProblemConfig &config,
                     const DeviceConfig &d_config,
                     FCT_initialization::InitState &external_state) {
 
-  size_t ndx = external_state.ndx;
-  size_t flux_size = ndx+1;
-  double u_state[ndx + 4];
+  const size_t ndx = external_state.ndx;
+  const size_t halo_state = ndx+4;
+  const size_t flux_size = ndx+1;
+  double u_state[halo_state];
   double flux_low[flux_size];
   double flux_high[flux_size];
   double adiff_flux[flux_size];
@@ -67,6 +68,7 @@ void do_computation(const FCT_initialization::ProblemConfig &config,
     u_state[i + 2] = external_state.u[i];
   }
 
+  #pragma acc data create(flux_low[0:flux_size], flux_high[0:flux_size], adiff_flux[0:flux_size], flux_c[0:flux_size]) copy(u_state[0:halo_state])
   {
     // Copy relevant configs out of structs
     const double a_vel = config.a, dt = config.dt, dx = external_state.dx;
