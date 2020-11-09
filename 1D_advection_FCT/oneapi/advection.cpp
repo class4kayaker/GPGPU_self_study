@@ -179,7 +179,7 @@ void do_computation(const FCT_initialization::ProblemConfig &config,
       device_queue->submit([&](cl::sycl::handler &cgh) {
         auto acc_u = u_state.get_access<cl::sycl::access::mode::read>(cgh);
         auto acc_flux_low =
-            flux_low.get_access<cl::sycl::access::mode::write>(cgh);
+            flux_low.get_access<cl::sycl::access::mode::discard_write>(cgh);
         cgh.parallel_for<CalcLowFlux>(flux_size, [=](cl::sycl::id<1> index) {
           acc_flux_low[index] = a_vel * acc_u[index + 1];
         });
@@ -187,7 +187,7 @@ void do_computation(const FCT_initialization::ProblemConfig &config,
       device_queue->submit([&](cl::sycl::handler &cgh) {
         auto acc_u = u_state.get_access<cl::sycl::access::mode::read>(cgh);
         auto acc_flux_high =
-            flux_high.get_access<cl::sycl::access::mode::write>(cgh);
+            flux_high.get_access<cl::sycl::access::mode::discard_write>(cgh);
         cgh.parallel_for<CalcHighFlux>(flux_size, [=](cl::sycl::id<1> index) {
           const double sigma_i = (a_vel * dt / dx);
           acc_flux_high[index] = a_vel * 0.5 *
@@ -202,7 +202,7 @@ void do_computation(const FCT_initialization::ProblemConfig &config,
         auto acc_flux_high =
             flux_high.get_access<cl::sycl::access::mode::read>(cgh);
         auto acc_adiff_flux =
-            adiff_flux.get_access<cl::sycl::access::mode::write>(cgh);
+            adiff_flux.get_access<cl::sycl::access::mode::discard_write>(cgh);
         cgh.parallel_for<CalcADiffFlux>(flux_size, [=](cl::sycl::id<1> index) {
           acc_adiff_flux[index] = acc_flux_high[index] - acc_flux_low[index];
         });
@@ -211,7 +211,7 @@ void do_computation(const FCT_initialization::ProblemConfig &config,
       device_queue->submit([&](cl::sycl::handler &cgh) {
         auto acc_flux_low =
             flux_low.get_access<cl::sycl::access::mode::read>(cgh);
-        auto acc_u = u_state.get_access<cl::sycl::access::mode::write>(cgh);
+        auto acc_u = u_state.get_access<cl::sycl::access::mode::discard_write>(cgh);
         cgh.parallel_for<LowFluxUpdate>(
             core_state_size, [=](cl::sycl::id<1> index) {
               const double dtdx = (dt / dx);
@@ -235,7 +235,7 @@ void do_computation(const FCT_initialization::ProblemConfig &config,
         auto acc_adiff_flux =
             adiff_flux.get_access<cl::sycl::access::mode::read>(cgh);
         auto acc_u = u_state.get_access<cl::sycl::access::mode::read>(cgh);
-        auto acc_flux_c = flux_c.get_access<cl::sycl::access::mode::write>(cgh);
+        auto acc_flux_c = flux_c.get_access<cl::sycl::access::mode::discard_write>(cgh);
         cgh.parallel_for<CalcFCTFLux>(flux_size, [=](cl::sycl::id<1> index) {
           const double dxdt = (dx / dt);
           const double sign_a = cl::sycl::copysign(1.0, acc_adiff_flux[index]);
@@ -250,7 +250,7 @@ void do_computation(const FCT_initialization::ProblemConfig &config,
       // Do full update
       device_queue->submit([&](cl::sycl::handler &cgh) {
         auto acc_flux_c = flux_c.get_access<cl::sycl::access::mode::read>(cgh);
-        auto acc_u = u_state.get_access<cl::sycl::access::mode::write>(cgh);
+        auto acc_u = u_state.get_access<cl::sycl::access::mode::discard_write>(cgh);
         cgh.parallel_for<FullUpdate>(
             core_state_size, [=](cl::sycl::id<1> index) {
               const double dtdx = (dt / dx);
