@@ -68,43 +68,51 @@ void do_computation(const FCT_initialization::ProblemConfig &config,
   cl::sycl::device device_selected;
   {
     unsigned int dev_sel = 0;
-    std::vector<cl::sycl::device> devices = cl::sycl::device::get_devices();
+    std::vector<cl::sycl::platform> platforms;
 
     cl::sycl::default_selector backup_selector;
     cl::sycl::device default_device = backup_selector.select_device();
     const std::string default_device_name =
         default_device.get_info<cl::sycl::info::device::name>();
 
+    unsigned int plat_i = 0;
     std::cout << "Device List:" << std::endl;
-    unsigned int dev_i = 0;
-    for (const auto &dev : devices) {
-      const std::string dev_name = dev.get_info<cl::sycl::info::device::name>();
-      if (d_config.device_name == dev_name) {
-        dev_sel = dev_i + 1;
-      }
-      std::string dev_type;
-      auto d_type_var = dev.get_info<cl::sycl::info::device::device_type>();
-      if (d_type_var == cl::sycl::info::device_type::cpu) {
-        dev_type = "cpu";
-      } else if (d_type_var == cl::sycl::info::device_type::gpu) {
-        dev_type = "gpu";
-      } else if (d_type_var == cl::sycl::info::device_type::host) {
-        dev_type = "hst";
-      } else {
-        dev_type = "unk";
-      }
-      std::cout << "\t[" << dev_i + 1
-                << (dev_name == d_config.device_name ? "*" : " ")
-                << (dev_name == default_device_name ? "D" : " ") << "] ("
-                << dev_type << ") " << dev_name << std::endl;
-      ++dev_i;
+    for (const auto &plat : cl::sycl::platform::get_platforms())
+    {
+        const std::string plat_name = plat.get_info<cl::sycl::info::platform::name>();
+        std::cout << "\t[" << plat_i +1 << "] " << plat_name << std::endl;
+        std::vector<cl::sycl::device> devices = plat.get_devices();
+        unsigned int dev_i = 0;
+        for (const auto &dev : devices) {
+          const std::string dev_name = dev.get_info<cl::sycl::info::device::name>();
+          if (d_config.device_name == dev_name) {
+            dev_sel = dev_i + 1;
+          }
+          std::string dev_type;
+          auto d_type_var = dev.get_info<cl::sycl::info::device::device_type>();
+          if (d_type_var == cl::sycl::info::device_type::cpu) {
+            dev_type = "cpu";
+          } else if (d_type_var == cl::sycl::info::device_type::gpu) {
+            dev_type = "gpu";
+          } else if (d_type_var == cl::sycl::info::device_type::host) {
+            dev_type = "hst";
+          } else {
+            dev_type = "unk";
+          }
+          std::cout << "\t\t[" << dev_i + 1
+                    << (dev_name == d_config.device_name ? "*" : " ")
+                    << (dev_name == default_device_name ? "D" : " ") << "] ("
+                    << dev_type << ") " << dev_name << std::endl;
+          ++dev_i;
+        }
+        if (d_config.device_name != "" && dev_sel == 0) {
+          std::cout << "Specified device " << d_config.device_name << " not found."
+                    << std::endl;
+          exit(-1);
+        }
+        device_selected = dev_sel > 0 ? devices[dev_sel - 1] : default_device;
+        ++plat_i;
     }
-    if (d_config.device_name != "" && dev_sel == 0) {
-      std::cout << "Specified device " << d_config.device_name << " not found."
-                << std::endl;
-      exit(-1);
-    }
-    device_selected = dev_sel > 0 ? devices[dev_sel - 1] : default_device;
   }
   unsigned int ndx = external_state.ndx;
   std::vector<cl::sycl::cl_double> host_u_state(ndx + 4);
