@@ -18,7 +18,7 @@ template<typename T>
 void write_solution(const std::string outputfn, const struct Model_Data::SolutionState<T> &state);
 
 template<typename T>
-void write_vis_metadata(const std::string outputfn, const ProblemState<t> &state, const std::string problemfn, const std::string solutionfn);
+void write_vis_metadata(const std::string metafn, const std::string heavy_fn, const SolutionState<t> &state);
 
 } // namespace FCT_output
 

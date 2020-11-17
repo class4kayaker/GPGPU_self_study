@@ -4,25 +4,25 @@
 
 namespace FCT_initialization {
 
-ProblemConfig::ProblemConfig()
-    : hdf5_config_filename(""), hdf5_output_filename("") {}
-
-ProblemConfig::ProblemConfig(const size_t a_ndx, const size_t a_ndy,
+ProblemConfig::ProblemConfig(const unsigned int a_mxiters, const double a_epsilon,
                              const std::string config_fn,
                              const std::string output_fn)
-    : hdf5_config_filename(config_fn), hdf5_output_filename(output_fn) {}
+    : mxiters(a_mxiters), epsilon(a_epsilon), hdf5_config_filename(config_fn), hdf5_output_filename(output_fn) {}
 
 template <typename T>
 ProblemState<T>::ProblemState()
-    : ndx(0), ndy(0), hx(0), hy(0), heat_conductivity(ndx * ndy, 0.0),
-      heat_source(ndx * ndy, 0.0), temperature_bnd(2 * (ndx + ndy - 2), 0.0);
+    : ndx(2), ndy(2), hx(0), hy(0),
+      heat_conductivity((ndx + 1) * (ndy + 1), 0.0),
+      heat_source((ndx - 1) * (ndy - 1), 0.0),
+      temperature_bnd(2 * (ndx + ndy), 0.0);
 
 template <typename T>
 ProblemState<T>::ProblemState(const size_t a_ndx, const size_t a_ndy, T a_hx,
                               T a_hy)
     : ndx(a_ndx), ndy(a_ndy), hx(a_hx), hy(a_hy),
-      heat_conductivity(ndx * ndy, 0.0), heat_source(ndx * ndy, 0.0),
-      temperature_bnd(2 * (ndx + ndy - 2), 0.0);
+      heat_conductivity((ndx + 1) * (ndy + 1), 0.0),
+      heat_source((ndx - 1) * (ndy - 1), 0.0),
+      temperature_bnd(2 * (ndx + ndy), 0.0);
 
 template <typename T>
 void ProblemState<T>::resize(const size_t a_ndx, const size_t a_ndy, T a_hx,
@@ -32,27 +32,33 @@ void ProblemState<T>::resize(const size_t a_ndx, const size_t a_ndy, T a_hx,
   hx = a_hx;
   hy = a_hy;
 
-  temperature.resize(ndx*ndy)
+  heat_conductivity.resize((ndx + 1) * (ndy + 1));
+  heat_source.resize((ndx - 1) * (ndy - 1));
+  temperature_bnd.resize(2 * (ndx + ndy));
 }
 
 template <typename T>
 SolutionState<T>::SolutionState()
-    : ndx(0), ndy(0), hx(0), hy(0), temperature(ndx * ndy, 0.0);
+    : ndx(2), ndy(2), hx(0), hy(0), temperature((ndx + 1) * (ndy + 1), 0.0);
 SolutionState<T>::SolutionState(const size_t a_ndx, const size_t a_ndy, T a_hx,
                                 T a_hy)
-    : ndx(a_ndx), ndy(a_ndy), hx(a_hx), hy(a_hy), temperature(ndx * ndy, 0.0);
+    : ndx(a_ndx), ndy(a_ndy), hx(a_hx), hy(a_hy), temperature((ndx+1) * (ndy+1), 0.0);
 
 template <typename T>
 void SolutionState<T>::resize(const size_t a_ndx, const size_t a_ndy, T a_hx,
-                             T a_hy) {
+                              T a_hy) {
   nx = a_ndx;
   ny = a_ndy;
   hx = a_hx;
   hy = a_hy;
+
+  temperature.resize((ndx + 1) * (ndy + 1));
 }
 
 void print_config(const ProblemConfig &config) {
   std::cout << "Configuration:" << std::endl
+            << "  CG epsilon: " << config.epsilon << std::endl
+            << "  Max CG iters: " << config.mxiters << std::endl
             << "  Problem H5:  " << config.hdf5_init_fn << std::endl
             << "  Solution H5:   " << config.hdf5_end_fn << std::endl;
 }
@@ -86,12 +92,16 @@ template std::string toml_get_or_default<std::string>(toml::value file_value,
                                                       std::string other);
 
 struct ProblemConfig init_from_toml(const toml::value input_data) {
+  const unsigned int mxiters = toml_get_or_default<int>(
+          toml::find(input_data, "Max CG iters"), 30);
+  const double epsilon = toml_get_or_default<double>(
+          toml::find(input_data, "CG epsilon"), 1e-10);
   const std::string problem_h5_fn =
       toml::find<std::string>(input_data, "Problem file");
   const std::string soln_h5_fn = toml_get_or_default<std::string>(
       toml::find(input_data, "Solution file"), "output.h5");
 
-  struct ProblemConfig to_return(problem_h5_fn, soln_h5_fn);
+  struct ProblemConfig to_return(mxiters, epsilon, problem_h5_fn, soln_h5_fn);
 
   print_config(to_return);
 

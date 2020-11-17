@@ -15,9 +15,10 @@
 namespace Model_Data {
 
 struct ProblemConfig {
-  ProblemConfig();
-  ProblemConfig(const std::string config_fn, const std::string output_fn);
+  ProblemConfig(const unsigned int mxiters, const double epsilon, const std::string config_fn, const std::string output_fn);
 
+  const unsigned int mxiters;
+  const double epsilon;
   const std::string hdf5_config_filename;
   const std::string hdf5_output_filename;
 };
@@ -31,7 +32,7 @@ template <typename T> struct ProblemState {
   size_t ndx, ndy;
   typename T hx, hy;
   // note col major due to hdf5 quirk
-  std::vector<T> heat_conductivity;
+  std::vector<T> k;
   std::vector<T> heat_source;
   // Clockwise from upper left corner
   std::vector<T> temperature_bnd;
@@ -47,6 +48,8 @@ template <typename T> struct SolutionState {
   typename T hx, hy;
   // note col major due to hdf5 quirk
   std::vector<T> temperature;
+  std::vector<T> k;
+  std::vector<T> heat_source;
 }
 
 const toml::value

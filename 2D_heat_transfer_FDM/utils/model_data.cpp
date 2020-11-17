@@ -6,12 +6,13 @@ namespace FCT_output {
 const H5std_string DX_DATA_NAME("dx");
 const H5std_string DY_DATA_NAME("dy");
 const H5std_string TEMPERATURE_DATA_NAME("temperature");
-const H5std_string CONDUCTIVITY_DATA_NAME("conductivity");
+const H5std_string K_DATA_NAME("K");
 const H5std_string HEAT_SOURCE_DATA_NAME("source");
 const H5std_string TEMP_BND_DATA_NAME("source");
 
+template <typename T>
 void write_solution(const std::string outputfn,
-                    const struct Model_output::SolutionState &state) {
+                    const struct Model_output::SolutionState<T> &state) {
 
   try {
     H5::H5File outputf(outputfn.c_str(), H5F_ACC_TRUNC);
@@ -40,14 +41,30 @@ void write_solution(const std::string outputfn,
 
     // Store state data
     {
-      hsize_t state_fdim[] = {(hsize_t)state.ndx, (hsize_t)state.ndy};
-      H5::DataSpace state_fspace = H5::DataSpace(1, state_fdim);
+      hsize_t state_fdim[] = {(hsize_t)state.ndx + 1, (hsize_t)state.ndy + 1};
+      H5::DataSpace temperature_fspace = H5::DataSpace(1, state_fdim);
 
-      H5::DataSet state_data(outputf.createDataSet(TEMPERATURE_DATA_NAME,
-                                                   H5::PredType::NATIVE_DOUBLE,
-                                                   state_fspace, plist));
+      H5::DataSet temperature_data(outputf.createDataSet(
+          TEMPERATURE_DATA_NAME, H5::PredType::NATIVE_DOUBLE,
+          temperature_fspace, plist));
 
-      state_data.write(state.temperature.data(), H5::PredType::NATIVE_DOUBLE);
+      temperature_data.write(state.temperature.data(),
+                             H5::PredType::NATIVE_DOUBLE);
+
+      H5::DataSpace k_fspace = H5::DataSpace(1, state_fdim);
+
+      H5::DataSet k_data(outputf.createDataSet(
+          K_DATA_NAME, H5::PredType::NATIVE_DOUBLE, state_fspace, plist));
+
+      k_data.write(state.k.data(), H5::PredType::NATIVE_DOUBLE);
+
+      H5::DataSpace source_fspace = H5::DataSpace(1, state_fdim);
+
+      H5::DataSet source_data(outputf.createDataSet(HEAT_SOURCE_DATA_NAME,
+                                                    H5::PredType::NATIVE_DOUBLE,
+                                                    state_fspace, plist));
+
+      source_data.write(state.heat_source.data(), H5::PredType::NATIVE_DOUBLE);
     }
 
   } catch (H5::FileIException error) {
@@ -80,43 +97,50 @@ void read_state(const std::string inputfn,
 
     {
       // Get data size
-      H5::DataSet k_data = inputf.openDataSet(CONDUCTIVITY_DATA_NAME);
+      H5::DataSet k_data = inputf.openDataSet(K_DATA_NAME);
       H5::DataSpace k_fspace = k_data.getSpace();
       k_fspace.getSimpleExtentDims(&dims, NULL);
 
-      to_return.resize(dims[0], dims[1], dx, dy);
-
-      u = new double[dims[0] * dims[1]];
-      hsize_t nbnd = 2 * (dims[0] + dims[1] - 2);
-      u_bnd = new double[nbnd];
+      to_return.resize(dims[0] - 1, dims[1] - 1, dx, dy);
 
       // Read state data
-      k_data.read(u, H5::PredType::NATIVE_DOUBLE);
-      for (hsize_t j = 0; j < to_return.ndx; ++j) {
-        for (hsize_t i = 0; i < to_return.ndy; ++i) {
-          to_return.conductivity[j * to_return.ndy + i] =
-              u[j * to_return.ndy + i];
+      {
+        const hsize_t ndx = to_return.ndx + 1, ndy = to_return.ndy + 1;
+        u = new double[ndx * ndy];
+        k_data.read(u, H5::PredType::NATIVE_DOUBLE);
+        for (hsize_t j = 0; j < ndx; ++j) {
+          for (hsize_t i = 0; i < ndy; ++i) {
+            to_return.conductivity[j * ndy + i] = u[j * ndy + i];
+          }
         }
+        delete[] u;
       }
 
       H5::DataSet f_data = inputf.openDataSet(CONDUCTIVITY_DATA_NAME);
-      f_data.read(u, H5::PredType::NATIVE_DOUBLE);
-      for (hsize_t j = 0; j < to_return.ndx; ++j) {
-        for (hsize_t i = 0; i < to_return.ndy; ++i) {
-          to_return.conductivity[j * to_return.ndy + i] =
-              u[j * to_return.ndy + i];
+      {
+        const hsize_t ndx = to_return.ndx - 1, ndy = to_return.ndy - 1;
+        u = new double[ndx * ndy];
+        f_data.read(u, H5::PredType::NATIVE_DOUBLE);
+        for (hsize_t j = 0; j < ndx; ++j) {
+          for (hsize_t i = 0; i < ndy; ++i) {
+            to_return.conductivity[j * ndy + i] = u[j * ndy + i];
+          }
         }
+        delete[] u;
       }
 
       H5::DataSet bnd_data = inputf.openDataSet(TEMP_BND_DATA_NAME);
-      bnd_data.read(u_bnd, H5::PredType::NATIVE_DOUBLE);
-      for (hsize_t i = 0; i < nbnd; ++i) {
-        to_return.temperature_bnd[i] = u_bnd[i];
+      {
+        hsize_t nbnd = 2 * (dims[0] + dims[1]);
+        u_bnd = new double[nbnd];
+        bnd_data.read(u_bnd, H5::PredType::NATIVE_DOUBLE);
+        for (hsize_t i = 0; i < nbnd; ++i) {
+          to_return.temperature_bnd[i] = u_bnd[i];
+        }
+        delete[] u_bnd;
       }
     }
 
-    delete[] u;
-    delete[] u_bnd;
   } catch (H5::FileIException error) {
     error.printErrorStack();
     exit(-1);
@@ -124,10 +148,10 @@ void read_state(const std::string inputfn,
 }
 
 template <typename T>
-void write_vis_metadata(const std::string outputfn,
-                        const ProblemState<T> &state,
-                        const std::string problemfn,
-                        const std::string solutionfn) {
+void write_vis_metadata(const std::string metafn, const std::string heavy_fn,
+                        const SolutionState<t> &state) {
+  write_solution(heavy_fn, SolutionState);
+
   std::ofstream ofile;
   ofile.open(outputfn);
   ofile << "<Xdmf Version=\"2.0\">\n";
@@ -149,21 +173,21 @@ void write_vis_metadata(const std::string outputfn,
   ofile << "      <DataItem Format=\"HDF\" NumberType=\"Float\" "
            "Precision=\"8\" Dimensions=\""
         << state.ndx << " " << state.ndy << "\">\n";
-  ofile << "        " << problemfn << ":/" << CONDUCTIVITY_DATA_NAME << "\n";
+  ofile << "        " << heavy_fn << ":/" << K_DATA_NAME << "\n";
   ofile << "      </DataItem>\n";
   ofile << "    </Attribute>\n";
   ofile << "    <Attribute Type=\"Scalar\" Name=\"F\" Center=\"Node\">\n";
   ofile << "      <DataItem Format=\"HDF\" NumberType=\"Float\" "
            "Precision=\"8\" Dimensions=\""
         << state.ndx << " " << state.ndy << "\">\n";
-  ofile << "        " << problemfn << ":/" << HEAT_SOURCE_DATA_NAME << "\n";
+  ofile << "        " << heavy_fn << ":/" << HEAT_SOURCE_DATA_NAME << "\n";
   ofile << "      </DataItem>\n";
   ofile << "    </Attribute>\n";
   ofile << "    <Attribute Type=\"Scalar\" Name=\"U\" Center=\"Node\">\n";
   ofile << "      <DataItem Format=\"HDF\" NumberType=\"Float\" "
            "Precision=\"8\" Dimensions=\""
         << state.ndx << " " << state.ndy << "\">\n";
-  ofile << "        " << solutionfn << ":/" << TEMPERATURE_DATA_NAME << "\n";
+  ofile << "        " << heavy_fn << ":/" << TEMPERATURE_DATA_NAME << "\n";
   ofile << "      </DataItem>\n";
   ofile << "    </Attribute>\n";
   ofile << "  </Grid>\n";
