@@ -15,22 +15,24 @@
 namespace Model_Data {
 
 struct ProblemConfig {
-  ProblemConfig(const unsigned int mxiters, const double epsilon, const std::string config_fn, const std::string output_fn);
+  ProblemConfig();
+  ProblemConfig(const unsigned int mxiters, const double epsilon,
+                const std::string config_fn, const std::string output_fn);
 
-  const unsigned int mxiters;
-  const double epsilon;
-  const std::string hdf5_config_filename;
-  const std::string hdf5_output_filename;
+  unsigned int mxiters;
+  double epsilon;
+  std::string hdf5_config_filename;
+  std::string hdf5_output_filename;
 };
 
 template <typename T> struct ProblemState {
-  ProblemState();
-  ProblemState(const size_t a_ndx, const size_t a_ndy, T a_hx, T a_hy);
+  ProblemState<T>();
+  ProblemState<T>(const size_t a_ndx, const size_t a_ndy, T a_hx, T a_hy);
 
-  void resize(const size_t a_ndx, const size_t a_ndy);
+  void resize(const size_t a_ndx, const size_t a_ndy, T a_hx, T a_hy);
 
   size_t ndx, ndy;
-  typename T hx, hy;
+  T hx, hy;
   // note col major due to hdf5 quirk
   std::vector<T> k;
   std::vector<T> heat_source;
@@ -39,21 +41,20 @@ template <typename T> struct ProblemState {
 };
 
 template <typename T> struct SolutionState {
-  SolutionState();
-  SolutionState(const size_t a_ndx, const size_t a_ndy, T a_hx, T a_hy);
+  SolutionState<T>();
+  SolutionState<T>(const size_t a_ndx, const size_t a_ndy, T a_hx, T a_hy);
 
-  void resize(const size_t a_ndx, const size_t a_ndy);
+  void resize(const size_t a_ndx, const size_t a_ndy, T a_hx, T a_hy);
 
   size_t ndx, ndy;
-  typename T hx, hy;
+  T hx, hy;
   // note col major due to hdf5 quirk
   std::vector<T> temperature;
   std::vector<T> k;
   std::vector<T> heat_source;
-}
+};
 
-const toml::value
-get_config_from_cli(int argc, char *argv[]);
+const toml::value get_config_from_cli(int argc, char *argv[]);
 struct ProblemConfig init_from_toml(const toml::value input_data);
 
 } // namespace Model_Data

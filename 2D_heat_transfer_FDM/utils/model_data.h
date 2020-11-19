@@ -7,18 +7,18 @@
 
 #include <string>
 
-#include "advection_utils.h"
+#include "model_utils.h"
 
 namespace Model_IO {
 
 template<typename T>
-void read_problem(const std::string inputfn, const struct Model_Data::ProblemState<T> &state);
+void read_problem(const std::string inputfn, Model_Data::ProblemState<T> &state);
 
 template<typename T>
-void write_solution(const std::string outputfn, const struct Model_Data::SolutionState<T> &state);
+void write_solution(const std::string outputfn, const Model_Data::SolutionState<T> &state);
 
 template<typename T>
-void write_vis_metadata(const std::string metafn, const std::string heavy_fn, const SolutionState<t> &state);
+void write_vis_metadata(const std::string metafn, const std::string heavy_fn, const Model_Data::SolutionState<T> &state);
 
 } // namespace FCT_output
 

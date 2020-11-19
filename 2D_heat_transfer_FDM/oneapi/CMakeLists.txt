@@ -22,5 +22,5 @@ INCLUDE_DIRECTORIES (${HDF5_INCLUDE_DIRS})
 set (LINK_LIBS ${LINK_LIBS} ${HDF5_LIBRARIES} OpenCL sycl ${HDF5_LIBRARIES})
 
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS}")
-add_executable (heat_OneAPI advection.cpp ../utils/model_data.cpp ../utils/model_utils.cpp)
+add_executable (heat_OneAPI ../heat_solve.cpp ../utils/model_data.cpp ../utils/model_utils.cpp)
 target_link_libraries(heat_OneAPI ${LINK_LIBS})

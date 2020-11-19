@@ -13,7 +13,7 @@ struct DeviceConfig {
   std::string device_name;
 };
 
-template<typename T>
+template <typename T>
 void do_computation(const Model_Data::ProblemConfig &config,
                     const DeviceConfig &,
                     const Model_Data::ProblemState<T> &problem,
@@ -23,8 +23,7 @@ int main(int argc, char *argv[]) {
   Model_Data::ProblemConfig config;
   DeviceConfig d_config;
   {
-    const auto input_config =
-        Model_Data::get_config_from_cli(argc, argv);
+    const auto input_config = Model_Data::get_config_from_cli(argc, argv);
 
     config = Model_Data::init_from_toml(input_config);
 
@@ -34,9 +33,10 @@ int main(int argc, char *argv[]) {
 
   Model_Data::ProblemState<double> problem_state;
 
-  Model_IO::read_problem(config.hdf5_config_filename, problem_state);
-  
-  Model_Data::SolutionState<double> solution_state(problem_state.ndx, problem_state.ndy, problem_state.hx, problem_state.hy);
+  Model_IO::read_problem(std::string(config.hdf5_config_filename), problem_state);
+
+  Model_Data::SolutionState<double> solution_state(
+      problem_state.ndx, problem_state.ndy, problem_state.hx, problem_state.hy);
 
   // Do computation
   auto start = std::chrono::steady_clock::now();
@@ -48,50 +48,42 @@ int main(int argc, char *argv[]) {
       1.0e3;
 
   // Print results (problem size, time and bandwidth in GB/s).
-  std::cout << "TIme for computation " << time
-            << " sec" << std::endl;
+  std::cout << "TIme for computation " << time << " sec" << std::endl;
 
-  Model_IO::write_solution(config.hdf5_config_filename, solution_state);
+  Model_IO::write_vis_metadata(std::string("output.xdmf"), std::string(config.hdf5_output_filename),
+                               solution_state);
 
   return 0;
 }
 
-template<typename T>
-struct MGLevel {
-    MGLevel(const size_t ndx, const size_t ndy, const T dx, const T dy);
+template <typename T> struct MGLevel {
+  MGLevel(const size_t ndx, const size_t ndy, const T dx, const T dy);
 
-    // Host data
-    const size_t ndx, ndy;
-    const T dx, dy;
+  // Host data
+  const size_t ndx, ndy;
+  const T dx, dy;
 
-    // Buffers
-    cl::sycl::buffer<T, 3> matrix;
-    cl::sycl::buffer<T, 2> u;
-    cl::sycl::buffer<T, 2> rhs;
-}
+  // Buffers
+  cl::sycl::buffer<T, 3> matrix;
+  cl::sycl::buffer<T, 2> u;
+  cl::sycl::buffer<T, 2> rhs;
+};
 
 // Useful functors
-class GenAFromK {
-}
-class RHSFromF {
-}
-class CoarsenA {
-}
-class AMult {
-}
-class InterpolateU {
-}
-class FullWeightU {
-}
-class SmoothWJ {
-}
-class DotProduct {
-}
+class GenAFromK {};
+class RHSFromF {};
+class CoarsenA {};
+class AMult {};
+class InterpolateU {};
+class FullWeightU {};
+class SmoothWJ {};
+class DotProduct {};
 
+template<typename T>
 void do_computation(const Model_Data::ProblemConfig &config,
-                    const DeviceConfig &,
-                    const Model_Data::ProblemState &problem,
-                    Model_Data::SolutionState &solution) {
+                    const DeviceConfig &d_config,
+                    const Model_Data::ProblemState<T> &problem,
+                    Model_Data::SolutionState<T> &solution) {
   cl::sycl::device device_selected;
   {
     unsigned int dev_sel = 0;
@@ -142,15 +134,6 @@ void do_computation(const Model_Data::ProblemConfig &config,
       ++plat_i;
     }
   }
-  unsigned int ndx = external_state.ndx;
-  std::vector<cl::sycl::cl_double> host_u_state(ndx + 4);
-  std::vector<cl::sycl::cl_double> host_flux_low(ndx + 1);
-  std::vector<cl::sycl::cl_double> host_flux_high(ndx + 1);
-  std::vector<cl::sycl::cl_double> host_adiff_flux(ndx + 1);
-  std::vector<cl::sycl::cl_double> host_flux_c(ndx + 1);
-
-  cl::sycl::range<1> state_size{ndx + 4}, flux_size{ndx + 1},
-      core_state_size{ndx};
 
   // cl::sycl::default_selector device_selector;
   std::unique_ptr<cl::sycl::queue> device_queue;
@@ -179,132 +162,9 @@ void do_computation(const Model_Data::ProblemConfig &config,
       << device_queue->get_device().get_info<cl::sycl::info::device::name>()
       << std::endl;
 
-  // Copy in data
-  for (size_t i = 0; i < ndx; ++i) {
-    host_u_state[i + 2] = external_state.u[i];
-  }
-
   {
     // Device buffers
-    cl::sycl::buffer<cl::sycl::cl_double, 1> u_state(host_u_state.data(),
-                                                     state_size);
-    cl::sycl::buffer<cl::sycl::cl_double, 1> flux_low(host_flux_low.data(),
-                                                      flux_size);
-    cl::sycl::buffer<cl::sycl::cl_double, 1> flux_high(host_flux_high.data(),
-                                                       flux_size);
-    cl::sycl::buffer<cl::sycl::cl_double, 1> adiff_flux(host_adiff_flux.data(),
-                                                        flux_size);
-    cl::sycl::buffer<cl::sycl::cl_double, 1> flux_c(host_flux_c.data(),
-                                                    flux_size);
-    // Copy relevant configs out of structs
-    const double a_vel = config.a, dt = config.dt, dx = external_state.dx;
 
-    for (unsigned int timestep = 0; timestep < config.ndt; ++timestep) {
-      // Set BCs
-      device_queue->submit([&](cl::sycl::handler &cgh) {
-        auto acc_u =
-            u_state.get_access<cl::sycl::access::mode::read_write>(cgh);
-        cgh.parallel_for<SetStateBC>(
-            cl::sycl::range<1>{4}, [=](cl::sycl::id<1> index) {
-              const unsigned int dst_index = index < 2 ? index : ndx + index;
-              const unsigned int src_index = index < 2 ? ndx + index : index;
-              acc_u[dst_index] = acc_u[src_index];
-            });
-      });
-      // Compute fluxes
-      device_queue->submit([&](cl::sycl::handler &cgh) {
-        auto acc_u = u_state.get_access<cl::sycl::access::mode::read>(cgh);
-        auto acc_flux_low =
-            flux_low.get_access<cl::sycl::access::mode::discard_write>(cgh);
-        cgh.parallel_for<CalcLowFlux>(flux_size, [=](cl::sycl::id<1> index) {
-          acc_flux_low[index] = a_vel * acc_u[index + 1];
-        });
-      });
-      device_queue->submit([&](cl::sycl::handler &cgh) {
-        auto acc_u = u_state.get_access<cl::sycl::access::mode::read>(cgh);
-        auto acc_flux_high =
-            flux_high.get_access<cl::sycl::access::mode::discard_write>(cgh);
-        cgh.parallel_for<CalcHighFlux>(flux_size, [=](cl::sycl::id<1> index) {
-          const double sigma_i = (a_vel * dt / dx);
-          acc_flux_high[index] = a_vel * 0.5 *
-                                 ((1 + sigma_i) * acc_u[index + 1] +
-                                  (1 - sigma_i) * acc_u[index + 2]);
-        });
-      });
-      // Compute diff flux
-      device_queue->submit([&](cl::sycl::handler &cgh) {
-        auto acc_flux_low =
-            flux_low.get_access<cl::sycl::access::mode::read>(cgh);
-        auto acc_flux_high =
-            flux_high.get_access<cl::sycl::access::mode::read>(cgh);
-        auto acc_adiff_flux =
-            adiff_flux.get_access<cl::sycl::access::mode::discard_write>(cgh);
-        cgh.parallel_for<CalcADiffFlux>(flux_size, [=](cl::sycl::id<1> index) {
-          acc_adiff_flux[index] = acc_flux_high[index] - acc_flux_low[index];
-        });
-      });
-      // Do low update
-      device_queue->submit([&](cl::sycl::handler &cgh) {
-        auto acc_flux_low =
-            flux_low.get_access<cl::sycl::access::mode::read>(cgh);
-        auto acc_u =
-            u_state.get_access<cl::sycl::access::mode::discard_write>(cgh);
-        cgh.parallel_for<LowFluxUpdate>(
-            core_state_size, [=](cl::sycl::id<1> index) {
-              const double dtdx = (dt / dx);
-              acc_u[index + 2] +=
-                  dtdx * (acc_flux_low[index] - acc_flux_low[index + 1]);
-            });
-      });
-      // Set BC cells
-      device_queue->submit([&](cl::sycl::handler &cgh) {
-        auto acc_u =
-            u_state.get_access<cl::sycl::access::mode::read_write>(cgh);
-        cgh.parallel_for<SetStateBC2>(
-            cl::sycl::range<1>{4}, [=](cl::sycl::id<1> index) {
-              const unsigned int dst_index = index < 2 ? index : ndx + index;
-              const unsigned int src_index = index < 2 ? ndx + index : index;
-              acc_u[dst_index] = acc_u[src_index];
-            });
-      });
-      // Calc FCT flux
-      device_queue->submit([&](cl::sycl::handler &cgh) {
-        auto acc_adiff_flux =
-            adiff_flux.get_access<cl::sycl::access::mode::read>(cgh);
-        auto acc_u = u_state.get_access<cl::sycl::access::mode::read>(cgh);
-        auto acc_flux_c =
-            flux_c.get_access<cl::sycl::access::mode::discard_write>(cgh);
-        cgh.parallel_for<CalcFCTFLux>(flux_size, [=](cl::sycl::id<1> index) {
-          const double dxdt = (dx / dt);
-          const double sign_a = cl::sycl::copysign(1.0, acc_adiff_flux[index]);
-          const double left_d = acc_u[index + 1] - acc_u[index + 0];
-          const double right_d = acc_u[index + 3] - acc_u[index + 2];
-          acc_flux_c[index] =
-              sign_a * std::max(0.0, std::min(std::min(sign_a * dxdt * left_d,
-                                                       sign_a * dxdt * right_d),
-                                              abs(acc_adiff_flux[index])));
-        });
-      });
-      // Do full update
-      device_queue->submit([&](cl::sycl::handler &cgh) {
-        auto acc_flux_c = flux_c.get_access<cl::sycl::access::mode::read>(cgh);
-        auto acc_u =
-            u_state.get_access<cl::sycl::access::mode::discard_write>(cgh);
-        cgh.parallel_for<FullUpdate>(
-            core_state_size, [=](cl::sycl::id<1> index) {
-              const double dtdx = (dt / dx);
-              acc_u[index + 2] +=
-                  dtdx * (acc_flux_c[index] - acc_flux_c[index + 1]);
-            });
-      });
-      device_queue->wait_and_throw();
-    }
-  }
-
-  external_state.time = config.end_time;
-
-  // Copy out into u
-  for (size_t i = 0; i < ndx; ++i) {
-    external_state.u[i] = host_u_state[i + 2];
+    device_queue->wait_and_throw();
   }
 }

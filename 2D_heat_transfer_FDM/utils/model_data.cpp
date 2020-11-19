@@ -1,8 +1,8 @@
 #include <H5Cpp.h>
 
-#include "advection_output.h"
+#include "model_data.h"
 
-namespace FCT_output {
+namespace Model_IO {
 const H5std_string DX_DATA_NAME("dx");
 const H5std_string DY_DATA_NAME("dy");
 const H5std_string TEMPERATURE_DATA_NAME("temperature");
@@ -12,7 +12,7 @@ const H5std_string TEMP_BND_DATA_NAME("source");
 
 template <typename T>
 void write_solution(const std::string outputfn,
-                    const struct Model_output::SolutionState<T> &state) {
+                    const struct Model_Data::SolutionState<T> &state) {
 
   try {
     H5::H5File outputf(outputfn.c_str(), H5F_ACC_TRUNC);
@@ -24,7 +24,7 @@ void write_solution(const std::string outputfn,
 
     // Store hx,hy
     {
-      H5::DataSpace hy_fspace = H5::DataSpace();
+      H5::DataSpace hx_fspace = H5::DataSpace();
 
       H5::DataSet hx_data(outputf.createDataSet(
           DX_DATA_NAME, H5::PredType::NATIVE_DOUBLE, hx_fspace, plist));
@@ -54,7 +54,7 @@ void write_solution(const std::string outputfn,
       H5::DataSpace k_fspace = H5::DataSpace(1, state_fdim);
 
       H5::DataSet k_data(outputf.createDataSet(
-          K_DATA_NAME, H5::PredType::NATIVE_DOUBLE, state_fspace, plist));
+          K_DATA_NAME, H5::PredType::NATIVE_DOUBLE, k_fspace, plist));
 
       k_data.write(state.k.data(), H5::PredType::NATIVE_DOUBLE);
 
@@ -62,7 +62,7 @@ void write_solution(const std::string outputfn,
 
       H5::DataSet source_data(outputf.createDataSet(HEAT_SOURCE_DATA_NAME,
                                                     H5::PredType::NATIVE_DOUBLE,
-                                                    state_fspace, plist));
+                                                    source_fspace, plist));
 
       source_data.write(state.heat_source.data(), H5::PredType::NATIVE_DOUBLE);
     }
@@ -73,8 +73,9 @@ void write_solution(const std::string outputfn,
   }
 }
 
-void read_state(const std::string inputfn,
-                FCT_initialization::InitState &to_return) {
+template <typename T>
+void read_problem(const std::string inputfn,
+                Model_Data::ProblemState<T> &to_return) {
   try {
     H5::H5File inputf(inputfn.c_str(), H5F_ACC_RDONLY);
 
@@ -99,7 +100,7 @@ void read_state(const std::string inputfn,
       // Get data size
       H5::DataSet k_data = inputf.openDataSet(K_DATA_NAME);
       H5::DataSpace k_fspace = k_data.getSpace();
-      k_fspace.getSimpleExtentDims(&dims, NULL);
+      k_fspace.getSimpleExtentDims(dims, NULL);
 
       to_return.resize(dims[0] - 1, dims[1] - 1, dx, dy);
 
@@ -110,20 +111,20 @@ void read_state(const std::string inputfn,
         k_data.read(u, H5::PredType::NATIVE_DOUBLE);
         for (hsize_t j = 0; j < ndx; ++j) {
           for (hsize_t i = 0; i < ndy; ++i) {
-            to_return.conductivity[j * ndy + i] = u[j * ndy + i];
+            to_return.k[j * ndy + i] = u[j * ndy + i];
           }
         }
         delete[] u;
       }
 
-      H5::DataSet f_data = inputf.openDataSet(CONDUCTIVITY_DATA_NAME);
+      H5::DataSet f_data = inputf.openDataSet(K_DATA_NAME);
       {
         const hsize_t ndx = to_return.ndx - 1, ndy = to_return.ndy - 1;
         u = new double[ndx * ndy];
         f_data.read(u, H5::PredType::NATIVE_DOUBLE);
         for (hsize_t j = 0; j < ndx; ++j) {
           for (hsize_t i = 0; i < ndy; ++i) {
-            to_return.conductivity[j * ndy + i] = u[j * ndy + i];
+            to_return.heat_source[j * ndy + i] = u[j * ndy + i];
           }
         }
         delete[] u;
@@ -149,11 +150,11 @@ void read_state(const std::string inputfn,
 
 template <typename T>
 void write_vis_metadata(const std::string metafn, const std::string heavy_fn,
-                        const SolutionState<t> &state) {
-  write_solution(heavy_fn, SolutionState);
+                        const Model_Data::SolutionState<T> &state) {
+  write_solution(heavy_fn, state);
 
   std::ofstream ofile;
-  ofile.open(outputfn);
+  ofile.open(metafn);
   ofile << "<Xdmf Version=\"2.0\">\n";
   // Write grid
   ofile << "  <Grid>\n";
@@ -194,4 +195,15 @@ void write_vis_metadata(const std::string metafn, const std::string heavy_fn,
   ofile << "</Xdmf>\n";
 }
 
-} // namespace FCT_output
+template
+void write_solution<double>(
+    const std::string outputfn,
+    const Model_Data::SolutionState<double> &state);
+template
+void read_problem<double>(const std::string inputfn,
+                        Model_Data::ProblemState<double> &to_return);
+template
+void write_vis_metadata<double>(const std::string metafn,
+                                const std::string heavy_fn,
+                                const Model_Data::SolutionState<double> &state);
+} // namespace Model_IO
