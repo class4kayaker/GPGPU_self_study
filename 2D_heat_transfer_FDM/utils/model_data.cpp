@@ -8,7 +8,7 @@ const H5std_string DY_DATA_NAME("dy");
 const H5std_string TEMPERATURE_DATA_NAME("temperature");
 const H5std_string K_DATA_NAME("K");
 const H5std_string HEAT_SOURCE_DATA_NAME("source");
-const H5std_string TEMP_BND_DATA_NAME("source");
+const H5std_string TEMP_BND_DATA_NAME("bnd_temp");
 
 template <typename T>
 void write_solution(const std::string outputfn,

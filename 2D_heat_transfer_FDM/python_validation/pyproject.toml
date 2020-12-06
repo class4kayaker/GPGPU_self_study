@@ -1,0 +1,22 @@
+[build-system]
+requires = ["flit_core >=2,<3"]
+build-backend = "flit_core.buildapi"
+
+[tool.flit.metadata]
+module = "fdm_heat_validation_utility"
+author = "Jonathan Robey"
+author-email = "class4kayaker@gmail.com"
+description-file = "README.md"
+license = "MIT"
+requires-python = "~=3.6"
+requires = [
+    "numpy",
+    "h5py",
+    "tomlkit",
+]
+
+[tool.flit.entrypoints."console_scripts"]
+fdm_heat_validation_utility = "fdm_heat_validation_utility.cli:main"
+
+[tool.black]
+line-length=79
