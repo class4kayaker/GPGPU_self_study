@@ -1,0 +1,26 @@
+# ansible-playbook -K %s
+---
+-
+  hosts:
+      localhost
+  connection: local
+  tasks:
+    - name: Create directories
+      file:
+        path: "{{item.path}}"
+        state: directory
+      with_items:
+        - { path: "~/opt/Sci" }
+        - { path: "~/opt/Sci/Src_Repos/" }
+    - name: Install Requirements
+      become: yes
+      when: ansible_facts['distribution'] == "Fedora"
+      dnf:
+        name:
+          - boost
+        state: present
+    - name: Get triSYCL
+      git:
+        accept_hostkey: yes
+        repo: https://github.com/Xilinx/triSYCL.git
+        dest: ~/opt/Sci/triSYCL
