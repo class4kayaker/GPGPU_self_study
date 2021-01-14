@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
       1.0e3;
 
   // Print results (problem size, time and bandwidth in GB/s).
-  std::cout << "TIme for " << config.ndt << " timestep computation " << time
+  std::cout << "Time for " << config.ndt << " timestep computation " << time
             << " sec" << std::endl;
 
   FCT_output::write_state(config.hdf5_end_fn, external_state);
