@@ -1,0 +1,19 @@
+# ansible-playbook -K %s
+---
+-
+  hosts:
+      localhost
+  connection: local
+  tasks:
+    - name: Create directories
+      file:
+        path: "{{item.path}}"
+        state: directory
+      with_items:
+        - { path: "~/opt/Sci" }
+        - { path: "~/opt/Src_Repos/" }
+    - name: Get kokkos
+      git:
+        accept_hostkey: yes
+        repo: https://github.com/triSYCL/triSYCL.git
+        dest: ~/opt/Sci/triSYCL

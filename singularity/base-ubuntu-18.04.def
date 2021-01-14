@@ -1,0 +1,29 @@
+BootStrap: docker
+From: ubuntu:18.04
+
+%setup
+cp ./add-repos-ubuntu.sh ${SINGULARITY_ROOTFS}/add-repos-ubuntu.sh
+
+%post
+export DEBIAN_FRONTEND=noninteractive
+apt update
+apt install -y libnuma-dev libpci-dev libelf-dev wget perl perl-modules gcc g++ git cmake clang
+# required for aomp build
+apt install -y iputils-ping gawk pkg-config python3 rsync
+
+bash /add-repos-ubuntu.sh
+
+# Install oneAPI
+apt install -y intel-basekit intel-hpckit
+
+# Install cuda
+
+apt install -y cuda
+
+# Install hipSYCL
+
+apt install -y hipsycl-base hipsycl-rocm
+
+# Install other libraries
+
+apt install -y libopenmpi-dev libopenmpi2 openmpi-bin libhdf5-dev libhdf5-openmpi-dev
