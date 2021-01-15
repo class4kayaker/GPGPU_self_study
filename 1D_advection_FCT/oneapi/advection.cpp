@@ -67,7 +67,7 @@ void do_computation(const FCT_initialization::ProblemConfig &config,
                     FCT_initialization::InitState &external_state) {
   cl::sycl::device device_selected;
   {
-    unsigned int dev_sel = 0;
+    bool dev_found = false;
     std::vector<cl::sycl::platform> platforms;
 
     cl::sycl::default_selector backup_selector;
@@ -77,41 +77,46 @@ void do_computation(const FCT_initialization::ProblemConfig &config,
 
     unsigned int plat_i = 0;
     std::cout << "Device List:" << std::endl;
-    for (const auto &plat : cl::sycl::platform::get_platforms())
-    {
-        const std::string plat_name = plat.get_info<cl::sycl::info::platform::name>();
-        std::cout << "\t[" << plat_i +1 << "] " << plat_name << std::endl;
-        std::vector<cl::sycl::device> devices = plat.get_devices();
-        unsigned int dev_i = 0;
-        for (const auto &dev : devices) {
-          const std::string dev_name = dev.get_info<cl::sycl::info::device::name>();
-          if (d_config.device_name == dev_name) {
-            dev_sel = dev_i + 1;
-          }
-          std::string dev_type;
-          auto d_type_var = dev.get_info<cl::sycl::info::device::device_type>();
-          if (d_type_var == cl::sycl::info::device_type::cpu) {
-            dev_type = "cpu";
-          } else if (d_type_var == cl::sycl::info::device_type::gpu) {
-            dev_type = "gpu";
-          } else if (d_type_var == cl::sycl::info::device_type::host) {
-            dev_type = "hst";
-          } else {
-            dev_type = "unk";
-          }
-          std::cout << "\t\t[" << dev_i + 1
-                    << (dev_name == d_config.device_name ? "*" : " ")
-                    << (dev_name == default_device_name ? "D" : " ") << "] ("
-                    << dev_type << ") " << dev_name << std::endl;
-          ++dev_i;
+    for (const auto &plat : cl::sycl::platform::get_platforms()) {
+      const std::string plat_name =
+          plat.get_info<cl::sycl::info::platform::name>();
+      std::cout << "\t[" << plat_i + 1 << "] " << plat_name << std::endl;
+      std::vector<cl::sycl::device> devices = plat.get_devices();
+      unsigned int dev_i = 0;
+      for (const auto &dev : devices) {
+        const std::string dev_name =
+            dev.get_info<cl::sycl::info::device::name>();
+        const bool selected_dev = (d_config.device_name == dev_name);
+        if (selected_dev) {
+          device_selected = dev;
+          dev_found = true;
         }
-        if (d_config.device_name != "" && dev_sel == 0) {
-          std::cout << "Specified device " << d_config.device_name << " not found."
-                    << std::endl;
-          exit(-1);
+        std::string dev_type;
+        auto d_type_var = dev.get_info<cl::sycl::info::device::device_type>();
+        if (d_type_var == cl::sycl::info::device_type::cpu) {
+          dev_type = "cpu";
+        } else if (d_type_var == cl::sycl::info::device_type::gpu) {
+          dev_type = "gpu";
+        } else if (d_type_var == cl::sycl::info::device_type::host) {
+          dev_type = "hst";
+        } else {
+          dev_type = "unk";
         }
-        device_selected = dev_sel > 0 ? devices[dev_sel - 1] : default_device;
-        ++plat_i;
+        std::cout << "\t\t[" << dev_i + 1
+                  << (selected_dev? "*" : " ")
+                  << (dev_name == default_device_name ? "D" : " ") << "] ("
+                  << dev_type << ") \"" << dev_name << "\"" << std::endl;
+        ++dev_i;
+      }
+      ++plat_i;
+    }
+    if (d_config.device_name != "" && (!dev_found)) {
+      std::cout << "Specified device " << d_config.device_name << " not found."
+                << std::endl;
+      exit(-1);
+    }
+    if (!dev_found) {
+      device_selected = default_device;
     }
   }
   unsigned int ndx = external_state.ndx;
@@ -219,7 +224,8 @@ void do_computation(const FCT_initialization::ProblemConfig &config,
       device_queue->submit([&](cl::sycl::handler &cgh) {
         auto acc_flux_low =
             flux_low.get_access<cl::sycl::access::mode::read>(cgh);
-        auto acc_u = u_state.get_access<cl::sycl::access::mode::discard_write>(cgh);
+        auto acc_u =
+            u_state.get_access<cl::sycl::access::mode::discard_write>(cgh);
         cgh.parallel_for<LowFluxUpdate>(
             core_state_size, [=](cl::sycl::id<1> index) {
               const double dtdx = (dt / dx);
@@ -243,7 +249,8 @@ void do_computation(const FCT_initialization::ProblemConfig &config,
         auto acc_adiff_flux =
             adiff_flux.get_access<cl::sycl::access::mode::read>(cgh);
         auto acc_u = u_state.get_access<cl::sycl::access::mode::read>(cgh);
-        auto acc_flux_c = flux_c.get_access<cl::sycl::access::mode::discard_write>(cgh);
+        auto acc_flux_c =
+            flux_c.get_access<cl::sycl::access::mode::discard_write>(cgh);
         cgh.parallel_for<CalcFCTFLux>(flux_size, [=](cl::sycl::id<1> index) {
           const double dxdt = (dx / dt);
           const double sign_a = cl::sycl::copysign(1.0, acc_adiff_flux[index]);
@@ -258,7 +265,8 @@ void do_computation(const FCT_initialization::ProblemConfig &config,
       // Do full update
       device_queue->submit([&](cl::sycl::handler &cgh) {
         auto acc_flux_c = flux_c.get_access<cl::sycl::access::mode::read>(cgh);
-        auto acc_u = u_state.get_access<cl::sycl::access::mode::discard_write>(cgh);
+        auto acc_u =
+            u_state.get_access<cl::sycl::access::mode::discard_write>(cgh);
         cgh.parallel_for<FullUpdate>(
             core_state_size, [=](cl::sycl::id<1> index) {
               const double dtdx = (dt / dx);
