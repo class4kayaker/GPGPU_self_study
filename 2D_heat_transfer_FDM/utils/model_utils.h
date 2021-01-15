@@ -25,9 +25,9 @@ struct ProblemConfig {
   std::string hdf5_output_filename;
 };
 
-template <typename T> struct ProblemState {
-  ProblemState<T>();
-  ProblemState<T>(const size_t a_ndx, const size_t a_ndy, T a_hx, T a_hy);
+template <typename T> struct ModelState {
+  ModelState<T>();
+  ModelState<T>(const size_t a_ndx, const size_t a_ndy, T a_hx, T a_hy);
 
   void resize(const size_t a_ndx, const size_t a_ndy, T a_hx, T a_hy);
 
@@ -36,22 +36,7 @@ template <typename T> struct ProblemState {
   // note col major due to hdf5 quirk
   std::vector<T> k;
   std::vector<T> heat_source;
-  // Clockwise from upper left corner
-  std::vector<T> temperature_bnd;
-};
-
-template <typename T> struct SolutionState {
-  SolutionState<T>();
-  SolutionState<T>(const size_t a_ndx, const size_t a_ndy, T a_hx, T a_hy);
-
-  void resize(const size_t a_ndx, const size_t a_ndy, T a_hx, T a_hy);
-
-  size_t ndx, ndy;
-  T hx, hy;
-  // note col major due to hdf5 quirk
   std::vector<T> temperature;
-  std::vector<T> k;
-  std::vector<T> heat_source;
 };
 
 const toml::value get_config_from_cli(int argc, char *argv[]);

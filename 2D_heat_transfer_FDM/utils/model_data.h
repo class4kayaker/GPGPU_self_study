@@ -12,13 +12,13 @@
 namespace Model_IO {
 
 template<typename T>
-void read_problem(const std::string inputfn, Model_Data::ProblemState<T> &state);
+void read_problem(const std::string inputfn, Model_Data::ModelState<T> &state);
 
 template<typename T>
-void write_solution(const std::string outputfn, const Model_Data::SolutionState<T> &state);
+void write_solution(const std::string outputfn, const Model_Data::ModelState<T> &state);
 
 template<typename T>
-void write_vis_metadata(const std::string metafn, const std::string heavy_fn, const Model_Data::SolutionState<T> &state);
+void write_vis_metadata(const std::string metafn, const std::string heavy_fn, const Model_Data::ModelState<T> &state);
 
 } // namespace FCT_output
 

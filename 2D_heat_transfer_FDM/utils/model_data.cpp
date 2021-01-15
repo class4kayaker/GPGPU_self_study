@@ -8,11 +8,10 @@ const H5std_string DY_DATA_NAME("dy");
 const H5std_string TEMPERATURE_DATA_NAME("temperature");
 const H5std_string K_DATA_NAME("K");
 const H5std_string HEAT_SOURCE_DATA_NAME("source");
-const H5std_string TEMP_BND_DATA_NAME("bnd_temp");
 
 template <typename T>
 void write_solution(const std::string outputfn,
-                    const struct Model_Data::SolutionState<T> &state) {
+                    const struct Model_Data::ModelState<T> &state) {
 
   try {
     H5::H5File outputf(outputfn.c_str(), H5F_ACC_TRUNC);
@@ -42,7 +41,7 @@ void write_solution(const std::string outputfn,
     // Store state data
     {
       hsize_t state_fdim[] = {(hsize_t)state.ndx + 1, (hsize_t)state.ndy + 1};
-      H5::DataSpace temperature_fspace = H5::DataSpace(1, state_fdim);
+      H5::DataSpace temperature_fspace = H5::DataSpace(2, state_fdim);
 
       H5::DataSet temperature_data(outputf.createDataSet(
           TEMPERATURE_DATA_NAME, H5::PredType::NATIVE_DOUBLE,
@@ -51,14 +50,14 @@ void write_solution(const std::string outputfn,
       temperature_data.write(state.temperature.data(),
                              H5::PredType::NATIVE_DOUBLE);
 
-      H5::DataSpace k_fspace = H5::DataSpace(1, state_fdim);
+      H5::DataSpace k_fspace = H5::DataSpace(2, state_fdim);
 
       H5::DataSet k_data(outputf.createDataSet(
           K_DATA_NAME, H5::PredType::NATIVE_DOUBLE, k_fspace, plist));
 
       k_data.write(state.k.data(), H5::PredType::NATIVE_DOUBLE);
 
-      H5::DataSpace source_fspace = H5::DataSpace(1, state_fdim);
+      H5::DataSpace source_fspace = H5::DataSpace(2, state_fdim);
 
       H5::DataSet source_data(outputf.createDataSet(HEAT_SOURCE_DATA_NAME,
                                                     H5::PredType::NATIVE_DOUBLE,
@@ -75,7 +74,7 @@ void write_solution(const std::string outputfn,
 
 template <typename T>
 void read_problem(const std::string inputfn,
-                Model_Data::ProblemState<T> &to_return) {
+                Model_Data::ModelState<T> &to_return) {
   try {
     H5::H5File inputf(inputfn.c_str(), H5F_ACC_RDONLY);
 
@@ -107,38 +106,37 @@ void read_problem(const std::string inputfn,
       // Read state data
       {
         const hsize_t ndx = to_return.ndx + 1, ndy = to_return.ndy + 1;
-        u = new double[ndx * ndy];
+        double u[ndx * ndy];
         k_data.read(u, H5::PredType::NATIVE_DOUBLE);
         for (hsize_t j = 0; j < ndx; ++j) {
           for (hsize_t i = 0; i < ndy; ++i) {
             to_return.k[j * ndy + i] = u[j * ndy + i];
           }
         }
-        delete[] u;
       }
 
-      H5::DataSet f_data = inputf.openDataSet(K_DATA_NAME);
+      H5::DataSet f_data = inputf.openDataSet(HEAT_SOURCE_DATA_NAME);
       {
-        const hsize_t ndx = to_return.ndx - 1, ndy = to_return.ndy - 1;
-        u = new double[ndx * ndy];
-        f_data.read(u, H5::PredType::NATIVE_DOUBLE);
+        const hsize_t ndx = to_return.ndx + 1, ndy = to_return.ndy + 1;
+        double f[ndx * ndy];
+        f_data.read(f, H5::PredType::NATIVE_DOUBLE);
         for (hsize_t j = 0; j < ndx; ++j) {
           for (hsize_t i = 0; i < ndy; ++i) {
-            to_return.heat_source[j * ndy + i] = u[j * ndy + i];
+            to_return.heat_source[j * ndy + i] = f[j * ndy + i];
           }
         }
-        delete[] u;
       }
 
-      H5::DataSet bnd_data = inputf.openDataSet(TEMP_BND_DATA_NAME);
+      H5::DataSet temperature_data = inputf.openDataSet(TEMPERATURE_DATA_NAME);
       {
-        hsize_t nbnd = 2 * (dims[0] + dims[1]);
-        u_bnd = new double[nbnd];
-        bnd_data.read(u_bnd, H5::PredType::NATIVE_DOUBLE);
-        for (hsize_t i = 0; i < nbnd; ++i) {
-          to_return.temperature_bnd[i] = u_bnd[i];
+        const hsize_t ndx = to_return.ndx + 1, ndy = to_return.ndy + 1;
+        double t[ndx * ndy];
+        temperature_data.read(t, H5::PredType::NATIVE_DOUBLE);
+        for (hsize_t j = 0; j < ndx; ++j) {
+          for (hsize_t i = 0; i < ndy; ++i) {
+            to_return.temperature[j * ndy + i] = t[j * ndy + i];
+          }
         }
-        delete[] u_bnd;
       }
     }
 
@@ -150,60 +148,63 @@ void read_problem(const std::string inputfn,
 
 template <typename T>
 void write_vis_metadata(const std::string metafn, const std::string heavy_fn,
-                        const Model_Data::SolutionState<T> &state) {
+                        const Model_Data::ModelState<T> &state) {
   write_solution(heavy_fn, state);
 
   std::ofstream ofile;
   ofile.open(metafn);
+  ofile << "<?xml version='1.0' encoding='UTF-8'?>";
   ofile << "<Xdmf Version=\"2.0\">\n";
   // Write grid
-  ofile << "  <Grid>\n";
-  ofile << "    <Topology TopologyType=\"2DCoRectMesh\" Dimensions=\""
+  ofile << "  <Domain>\n";
+  ofile << "    <Grid>\n";
+  ofile << "      <Topology TopologyType=\"2DCoRectMesh\" Dimensions=\""
         << state.ndx << " " << state.ndy << "\"/>\n";
-  ofile << "    <Geometry GeometryType=\"Origin_DxDy\">\n";
-  ofile << "      <DataItem Format=\"XML\" NumberType=\"Float\" "
+  ofile << "      <Geometry GeometryType=\"Origin_DxDy\">\n";
+  ofile << "        <DataItem Format=\"XML\" NumberType=\"Float\" "
            "Precision=\"8\" Dimensions=\"2\">\n";
   ofile << "        0. 0.\n";
-  ofile << "      </DataItem>\n";
-  ofile << "      <DataItem Format=\"XML\" NumberType=\"Float\" "
+  ofile << "        </DataItem>\n";
+  ofile << "        <DataItem Format=\"XML\" NumberType=\"Float\" "
            "Precision=\"8\" Dimensions=\"2\">\n";
-  ofile << "        " << state.hx << " " << state.hy << "\n";
-  ofile << "      </DataItem>\n";
-  ofile << "    </Geometry>\n";
-  ofile << "    <Attribute Type=\"Scalar\" Name=\"K\" Center=\"Node\">\n";
-  ofile << "      <DataItem Format=\"HDF\" NumberType=\"Float\" "
+  ofile << "          " << state.hx << " " << state.hy << "\n";
+  ofile << "        </DataItem>\n";
+  ofile << "      </Geometry>\n";
+  ofile << "      <Attribute Type=\"Scalar\" Name=\"K\" Center=\"Node\">\n";
+  ofile << "        <DataItem Format=\"HDF\" NumberType=\"Float\" "
            "Precision=\"8\" Dimensions=\""
         << state.ndx << " " << state.ndy << "\">\n";
-  ofile << "        " << heavy_fn << ":/" << K_DATA_NAME << "\n";
-  ofile << "      </DataItem>\n";
-  ofile << "    </Attribute>\n";
-  ofile << "    <Attribute Type=\"Scalar\" Name=\"F\" Center=\"Node\">\n";
-  ofile << "      <DataItem Format=\"HDF\" NumberType=\"Float\" "
+  ofile << "          " << heavy_fn << ":/" << K_DATA_NAME << "\n";
+  ofile << "        </DataItem>\n";
+  ofile << "      </Attribute>\n";
+  ofile << "      <Attribute Type=\"Scalar\" Name=\"F\" Center=\"Node\">\n";
+  ofile << "        <DataItem Format=\"HDF\" NumberType=\"Float\" "
            "Precision=\"8\" Dimensions=\""
         << state.ndx << " " << state.ndy << "\">\n";
-  ofile << "        " << heavy_fn << ":/" << HEAT_SOURCE_DATA_NAME << "\n";
-  ofile << "      </DataItem>\n";
-  ofile << "    </Attribute>\n";
-  ofile << "    <Attribute Type=\"Scalar\" Name=\"U\" Center=\"Node\">\n";
-  ofile << "      <DataItem Format=\"HDF\" NumberType=\"Float\" "
+  ofile << "          " << heavy_fn << ":/" << HEAT_SOURCE_DATA_NAME << "\n";
+  ofile << "        </DataItem>\n";
+  ofile << "      </Attribute>\n";
+  ofile << "      <Attribute Type=\"Scalar\" Name=\"U\" Center=\"Node\">\n";
+  ofile << "        <DataItem Format=\"HDF\" NumberType=\"Float\" "
            "Precision=\"8\" Dimensions=\""
         << state.ndx << " " << state.ndy << "\">\n";
-  ofile << "        " << heavy_fn << ":/" << TEMPERATURE_DATA_NAME << "\n";
-  ofile << "      </DataItem>\n";
-  ofile << "    </Attribute>\n";
-  ofile << "  </Grid>\n";
+  ofile << "          " << heavy_fn << ":/" << TEMPERATURE_DATA_NAME << "\n";
+  ofile << "        </DataItem>\n";
+  ofile << "      </Attribute>\n";
+  ofile << "    </Grid>\n";
+  ofile << "  </Domain>\n";
   ofile << "</Xdmf>\n";
 }
 
 template
 void write_solution<double>(
     const std::string outputfn,
-    const Model_Data::SolutionState<double> &state);
+    const Model_Data::ModelState<double> &state);
 template
 void read_problem<double>(const std::string inputfn,
-                        Model_Data::ProblemState<double> &to_return);
+                        Model_Data::ModelState<double> &to_return);
 template
 void write_vis_metadata<double>(const std::string metafn,
                                 const std::string heavy_fn,
-                                const Model_Data::SolutionState<double> &state);
+                                const Model_Data::ModelState<double> &state);
 } // namespace Model_IO

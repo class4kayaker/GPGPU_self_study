@@ -16,8 +16,8 @@ struct DeviceConfig {
 template <typename T>
 void do_computation(const Model_Data::ProblemConfig &config,
                     const DeviceConfig &,
-                    const Model_Data::ProblemState<T> &problem,
-                    Model_Data::SolutionState<T> &solution);
+                    const Model_Data::ModelState<T> &problem,
+                    Model_Data::ModelState<T> &solution);
 
 int main(int argc, char *argv[]) {
   Model_Data::ProblemConfig config;
@@ -31,11 +31,11 @@ int main(int argc, char *argv[]) {
     d_config.device_name = toml::find_or<std::string>(dev_table, "Name", "");
   }
 
-  Model_Data::ProblemState<double> problem_state;
+  Model_Data::ModelState<double> problem_state({});
 
-  Model_IO::read_problem(std::string(config.hdf5_config_filename), problem_state);
+  Model_IO::read_problem(config.hdf5_config_filename, problem_state);
 
-  Model_Data::SolutionState<double> solution_state(
+  Model_Data::ModelState<double> solution_state(
       problem_state.ndx, problem_state.ndy, problem_state.hx, problem_state.hy);
 
   // Do computation
@@ -50,7 +50,8 @@ int main(int argc, char *argv[]) {
   // Print results (problem size, time and bandwidth in GB/s).
   std::cout << "TIme for computation " << time << " sec" << std::endl;
 
-  Model_IO::write_vis_metadata(std::string("output.xdmf"), std::string(config.hdf5_output_filename),
+  Model_IO::write_vis_metadata(std::string("output.xmf"),
+                               std::string(config.hdf5_output_filename),
                                solution_state);
 
   return 0;
@@ -79,11 +80,11 @@ class FullWeightU {};
 class SmoothWJ {};
 class DotProduct {};
 
-template<typename T>
+template <typename T>
 void do_computation(const Model_Data::ProblemConfig &config,
                     const DeviceConfig &d_config,
-                    const Model_Data::ProblemState<T> &problem,
-                    Model_Data::SolutionState<T> &solution) {
+                    const Model_Data::ModelState<T> &problem,
+                    Model_Data::ModelState<T> &solution) {
   cl::sycl::device device_selected;
   {
     unsigned int dev_sel = 0;
@@ -162,8 +163,23 @@ void do_computation(const Model_Data::ProblemConfig &config,
       << device_queue->get_device().get_info<cl::sycl::info::device::name>()
       << std::endl;
 
+  // Copy data over
+  for (size_t j = 0; j < problem.ndx+1; ++j) {
+    for (size_t i = 0; i < problem.ndy+1; ++i) {
+      size_t arr_ind = j * (problem.ndy+1) + i;
+      solution.k[arr_ind] = problem.k[arr_ind];
+      solution.heat_source[arr_ind] = problem.heat_source[arr_ind];
+      if (i == 0 || i == problem.ndy || j == 0 || j == problem.ndx ) {
+        solution.temperature[arr_ind] = problem.temperature[arr_ind];
+      } else {
+        solution.temperature[arr_ind] = 0.0;
+      }
+    }
+  }
+
   {
     // Device buffers
+    // Solution computation
 
     device_queue->wait_and_throw();
   }

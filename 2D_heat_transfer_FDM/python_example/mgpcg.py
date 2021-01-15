@@ -135,7 +135,7 @@ class ALoc:
     # Do coarsening based on interpolation and full weighting
     def coarsen(self):
         # Create matrix based on half size mesh
-        newN = self.n / 2
+        newN = self.n // 2
         ret = ALoc(newN)
         inVec = np.zeros((self.n - 1, self.n - 1), dtype=np.float64)
         # For each location in a 3x3 block
@@ -255,7 +255,7 @@ class MGGrid2d:
         if count < 1:
             return
         if self.coarg is None:
-            self.coarg = MGGrid2d(self.grid.n / 2)
+            self.coarg = MGGrid2d(self.grid.n // 2)
             self.coarg.fineg = self
         self.coarg.grid.A = self.grid.A.coarsen()
         if count > 1 or self.coarg is not None:
@@ -570,7 +570,7 @@ if __name__ == "__main__":
                 elif meth == "MG":
                     niter, normR, ctime = mgrun(mgg, u, f, mxiters, tol, swtype=swtype)
 
-                print fS.format(prob, meth, n, niter, normR, ctime)
+                print(fS.format(prob, meth, n, niter, normR, ctime))
                 results[prob][n][meth] = (niter, normR, ctime)
                 writeSolution(k, u, f, fnS.format(prob, meth, n))
 
