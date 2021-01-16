@@ -77,6 +77,9 @@ template <typename T> struct MGLevel {
   void initAfromK(const std::unique_ptr<cl::sycl::queue> &queue,
                   cl::sycl::buffer<T, 2> &prob_k);
 
+  void mult(const std::unique_ptr<cl::sycl::queue> &queue,
+            cl::sycl::buffer<T, 2> &in, cl::sycl::buffer<T, 2> &out);
+
   // Host data
   const size_t ndx, ndy;
   const T dx, dy;
@@ -102,8 +105,9 @@ template <typename T> MGLevel<T> MGLevel<T>::coarseLevel() {
 }
 
 template <typename T>
-void MGLevel<T>::initAfromK(const std::unique_ptr<cl::sycl::queue> &device_queue,
-                            cl::sycl::buffer<T, 2> &prob_k) {
+void MGLevel<T>::initAfromK(
+    const std::unique_ptr<cl::sycl::queue> &device_queue,
+    cl::sycl::buffer<T, 2> &prob_k) {
   device_queue->submit([&](cl::sycl::handler &cgh) {
     size_t ndx = ndx;
     size_t ndy = ndy;
@@ -132,16 +136,62 @@ void MGLevel<T>::initAfromK(const std::unique_ptr<cl::sycl::queue> &device_queue
           ptr_matrix[m_cen_idx] = (2.0 * k_c + k_xm + k_xp) / denom_x +
                                   (2.0 * k_c + k_ym + k_yp) / denom_y;
 
-          if (idx[1] < ndx - 2)
-            ptr_matrix[m_x_idx] = -1.0 * (k_c + k_xm) / denom_x;
+          ptr_matrix[m_x_idx] =
+              (idx[1] > 0) ? -1.0 * (k_c + k_xm) / denom_x : 0.0;
 
-          if (idx[0] < ndy - 2)
-            ptr_matrix[m_y_idx] = -1.0 * (k_c + k_ym) / denom_y;
+          ptr_matrix[m_y_idx] =
+              (idx[0] > 0) ? -1.0 * (k_c + k_ym) / denom_y : 0.0;
+          ptr_matrix[m_xpy_idx] = 0.0;
+          ptr_matrix[m_xmy_idx] = 0.0;
+        });
+  });
+}
 
-          if (idx[1] < ndx - 2 && idx[0] < ndy - 2) {
-            ptr_matrix[m_xpy_idx] = 0.0;
-            ptr_matrix[m_xmy_idx] = 0.0;
-          }
+template <typename T>
+void MGLevel<T>::mult(const std::unique_ptr<cl::sycl::queue> &queue,
+                      cl::sycl::buffer<T, 2> &in, cl::sycl::buffer<T, 2> &out) {
+  queue->submit([&](cl::sycl::handler &cgh) {
+    size_t ndx = ndx;
+    size_t ndy = ndy;
+    auto ptr_in = in.template get_access<cl::sycl::access::mode::read>(cgh);
+    auto ptr_out =
+        out.template get_access<cl::sycl::access::mode::discard_write>(cgh);
+    auto ptr_matrix =
+        matrix.template get_access<cl::sycl::access::mode::read>(cgh);
+    cgh.parallel_for(
+        cl::sycl::range<2>(ndy - 1, ndx - 1), [=](cl::sycl::id<2> idx) {
+          cl::sycl::id<3> mat_idx(0, idx[0], idx[1]);
+
+          const bool x_m = (idx[1] > 0), x_p = (idx[1] < ndx - 2),
+                     y_m = (idx[0] > 0), y_p = (idx[0] < ndy - 2);
+
+          ptr_out[idx] = ptr_matrix[mat_idx] * ptr_in[idx];
+          if (x_m)
+            ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 1, 0, 0)] *
+                            ptr_in[offset_idx(idx, 0, -1)];
+          if (x_p)
+            ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 1, 0, 1)] *
+                            ptr_in[offset_idx(idx, 0, 1)];
+          if (y_m)
+            ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 2, 0, 0)] *
+                            ptr_in[offset_idx(idx, -1, 0)];
+          if (y_p)
+            ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 2, 1, 0)] *
+                            ptr_in[offset_idx(idx, 1, 0)];
+
+          if (x_m && y_m)
+              ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 3, 0, 0)] *
+                  ptr_in[offset_idx(idx, -1, -1)];
+          if (x_p && y_p)
+              ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 3, 1, 1)] *
+                  ptr_in[offset_idx(idx, 1, 1)];
+
+          if (x_m && y_p)
+              ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 4, 0, 0)] *
+                  ptr_in[offset_idx(idx, -1, 1)];
+          if (x_p && y_m)
+              ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 4, 1, -1)] *
+                  ptr_in[offset_idx(idx, 1, -1)];
         });
   });
 }
