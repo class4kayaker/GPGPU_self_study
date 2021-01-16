@@ -57,10 +57,25 @@ int main(int argc, char *argv[]) {
   return 0;
 }
 
+// offset functions
+static inline cl::sycl::id<2> offset_idx(cl::sycl::id<2> i_idx, int ii,
+                                         int jj) {
+  return cl::sycl::id<2>(i_idx[0] + ii, i_idx[1] + jj);
+}
+static inline cl::sycl::id<3> offset_idx(cl::sycl::id<3> i_idx, int ii, int jj,
+                                         int kk) {
+  return cl::sycl::id<3>(i_idx[0] + ii, i_idx[1] + jj, i_idx[3] + kk);
+}
+
+// Multigrid grid class
+
 template <typename T> struct MGLevel {
   MGLevel(const size_t ndx, const size_t ndy, const T dx, const T dy);
 
   MGLevel coarseLevel();
+
+  void initAfromK(const std::unique_ptr<cl::sycl::queue> &queue,
+                  cl::sycl::buffer<T, 2> &prob_k);
 
   // Host data
   const size_t ndx, ndy;
@@ -86,14 +101,49 @@ template <typename T> MGLevel<T> MGLevel<T>::coarseLevel() {
   return MGLevel<T>(n_ndx, n_ndy, n_dx, n_dy);
 }
 
-// offset functions
-static inline cl::sycl::id<2> offset_idx(cl::sycl::id<2> i_idx, int ii,
-                                         int jj) {
-  return cl::sycl::id<2>(i_idx[0] + ii, i_idx[1] + jj);
-}
-static inline cl::sycl::id<3> offset_idx(cl::sycl::id<3> i_idx, int ii, int jj,
-                                         int kk) {
-  return cl::sycl::id<3>(i_idx[0] + ii, i_idx[1] + jj, i_idx[3] + kk);
+template <typename T>
+void MGLevel<T>::initAfromK(const std::unique_ptr<cl::sycl::queue> &device_queue,
+                            cl::sycl::buffer<T, 2> &prob_k) {
+  device_queue->submit([&](cl::sycl::handler &cgh) {
+    size_t ndx = ndx;
+    size_t ndy = ndy;
+    T dx = dx;
+    T dy = dy;
+    auto ptr_k = prob_k.template get_access<cl::sycl::access::mode::read>(cgh);
+    auto ptr_matrix =
+        matrix.template get_access<cl::sycl::access::mode::discard_write>(cgh);
+    cgh.parallel_for(
+        cl::sycl::range<2>(ndy - 1, ndx - 1), [=](cl::sycl::id<2> idx) {
+          const T denom_x = 1.0 / (2.0 * dx * dx);
+          const T denom_y = 1.0 / (2.0 * dy * dy);
+
+          const T k_c = ptr_k[offset_idx(idx, 1, 1)];
+          const T k_xm = ptr_k[offset_idx(idx, 1, 0)];
+          const T k_xp = ptr_k[offset_idx(idx, 1, 2)];
+          const T k_ym = ptr_k[offset_idx(idx, 0, 1)];
+          const T k_yp = ptr_k[offset_idx(idx, 2, 1)];
+
+          cl::sycl::id<3> m_cen_idx(0, idx[1], idx[0]);
+          cl::sycl::id<3> m_x_idx(1, idx[1], idx[0]);
+          cl::sycl::id<3> m_y_idx(2, idx[1], idx[0]);
+          cl::sycl::id<3> m_xpy_idx(3, idx[1], idx[0]);
+          cl::sycl::id<3> m_xmy_idx(4, idx[1], idx[0]);
+
+          ptr_matrix[m_cen_idx] = (2.0 * k_c + k_xm + k_xp) / denom_x +
+                                  (2.0 * k_c + k_ym + k_yp) / denom_y;
+
+          if (idx[1] < ndx - 2)
+            ptr_matrix[m_x_idx] = -1.0 * (k_c + k_xm) / denom_x;
+
+          if (idx[0] < ndy - 2)
+            ptr_matrix[m_y_idx] = -1.0 * (k_c + k_ym) / denom_y;
+
+          if (idx[1] < ndx - 2 && idx[0] < ndy - 2) {
+            ptr_matrix[m_xpy_idx] = 0.0;
+            ptr_matrix[m_xmy_idx] = 0.0;
+          }
+        });
+  });
 }
 
 // Useful functors
@@ -230,49 +280,7 @@ void do_computation(const Model_Data::ProblemConfig &config,
     // Do necessary init for MG
     {
       auto front_grid = grids.front();
-      device_queue->submit([&](cl::sycl::handler &cgh) {
-        size_t ndx = front_grid.ndx;
-        size_t ndy = front_grid.ndy;
-        T dx = front_grid.dx;
-        T dy = front_grid.dy;
-        auto ptr_k =
-            prob_k.template get_access<cl::sycl::access::mode::read>(cgh);
-        auto ptr_matrix =
-            front_grid.matrix
-                .template get_access<cl::sycl::access::mode::discard_write>(
-                    cgh);
-        cgh.parallel_for(
-            cl::sycl::range<2>(ndy - 1, ndx - 1), [=](cl::sycl::id<2> idx) {
-              const T denom_x = 1.0 / (2.0 * dx * dx);
-              const T denom_y = 1.0 / (2.0 * dy * dy);
-
-              const T k_c = ptr_k[offset_idx(idx, 1, 1)];
-              const T k_xm = ptr_k[offset_idx(idx, 1, 0)];
-              const T k_xp = ptr_k[offset_idx(idx, 1, 2)];
-              const T k_ym = ptr_k[offset_idx(idx, 0, 1)];
-              const T k_yp = ptr_k[offset_idx(idx, 2, 1)];
-
-              cl::sycl::id<3> m_cen_idx(0, idx[1], idx[0]);
-              cl::sycl::id<3> m_x_idx(1, idx[1], idx[0]);
-              cl::sycl::id<3> m_y_idx(2, idx[1], idx[0]);
-              cl::sycl::id<3> m_xpy_idx(3, idx[1], idx[0]);
-              cl::sycl::id<3> m_xmy_idx(4, idx[1], idx[0]);
-
-              ptr_matrix[m_cen_idx] = (2.0 * k_c + k_xm + k_xp) / denom_x +
-                                      (2.0 * k_c + k_ym + k_yp) / denom_y;
-
-              if (idx[1] < ndx - 2)
-                ptr_matrix[m_x_idx] = -1.0 * (k_c + k_xm) / denom_x;
-
-              if (idx[0] < ndy - 2)
-                ptr_matrix[m_y_idx] = -1.0 * (k_c + k_ym) / denom_y;
-
-              if (idx[1] < ndx - 2 && idx[0] < ndy - 2) {
-                ptr_matrix[m_xpy_idx] = 0.0;
-                ptr_matrix[m_xmy_idx] = 0.0;
-              }
-            });
-      });
+      front_grid.initAfromK(device_queue, prob_k);
     }
 
     // Solution computation
