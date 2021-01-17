@@ -619,6 +619,8 @@ void basic_CG(const std::unique_ptr<cl::sycl::queue> &queue,
 
       copy_vec(queue, resid, descent);
 
+      queue->wait_and_throw();
+
       int itr_cg;
 
       for(itr_cg=0; normhR > config.epsilon && normhR/origNormhR > config.epsilon && itr_cg<config.mxiters; ++itr_cg){
@@ -626,15 +628,17 @@ void basic_CG(const std::unique_ptr<cl::sycl::queue> &queue,
 
           data.mult(queue, descent, Adescent);
           T alpha = norm_resid/dot_product(queue, d_config, descent, Adescent);
+          
+          queue->wait_and_throw();
 
           inc_ay(queue, data.u, alpha, descent);
           inc_ay(queue, resid, -alpha, Adescent);
 
-          queue->wait_and_throw();
-
           old_norm_resid = norm_resid;
           norm_resid = dot_product(queue, d_config, resid, resid);
           normhR = norm_resid*data.m_dx*data.m_dy;
+
+          queue->wait_and_throw();
 
           if(normhR < config.epsilon)
               break;
