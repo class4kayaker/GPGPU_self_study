@@ -159,7 +159,7 @@ void write_vis_metadata(const std::string metafn, const std::string heavy_fn,
   ofile << "  <Domain>\n";
   ofile << "    <Grid>\n";
   ofile << "      <Topology TopologyType=\"2DCoRectMesh\" Dimensions=\""
-        << state.ndx << " " << state.ndy << "\"/>\n";
+        << state.ndx+1 << " " << state.ndy+1 << "\"/>\n";
   ofile << "      <Geometry GeometryType=\"Origin_DxDy\">\n";
   ofile << "        <DataItem Format=\"XML\" NumberType=\"Float\" "
            "Precision=\"8\" Dimensions=\"2\">\n";
@@ -173,21 +173,21 @@ void write_vis_metadata(const std::string metafn, const std::string heavy_fn,
   ofile << "      <Attribute Type=\"Scalar\" Name=\"K\" Center=\"Node\">\n";
   ofile << "        <DataItem Format=\"HDF\" NumberType=\"Float\" "
            "Precision=\"8\" Dimensions=\""
-        << state.ndx << " " << state.ndy << "\">\n";
+        << state.ndx+1 << " " << state.ndy+1 << "\">\n";
   ofile << "          " << heavy_fn << ":/" << K_DATA_NAME << "\n";
   ofile << "        </DataItem>\n";
   ofile << "      </Attribute>\n";
   ofile << "      <Attribute Type=\"Scalar\" Name=\"F\" Center=\"Node\">\n";
   ofile << "        <DataItem Format=\"HDF\" NumberType=\"Float\" "
            "Precision=\"8\" Dimensions=\""
-        << state.ndx << " " << state.ndy << "\">\n";
+        << state.ndx+1 << " " << state.ndy+1 << "\">\n";
   ofile << "          " << heavy_fn << ":/" << HEAT_SOURCE_DATA_NAME << "\n";
   ofile << "        </DataItem>\n";
   ofile << "      </Attribute>\n";
   ofile << "      <Attribute Type=\"Scalar\" Name=\"U\" Center=\"Node\">\n";
   ofile << "        <DataItem Format=\"HDF\" NumberType=\"Float\" "
            "Precision=\"8\" Dimensions=\""
-        << state.ndx << " " << state.ndy << "\">\n";
+        << state.ndx+1 << " " << state.ndy+1 << "\">\n";
   ofile << "          " << heavy_fn << ":/" << TEMPERATURE_DATA_NAME << "\n";
   ofile << "        </DataItem>\n";
   ofile << "      </Attribute>\n";

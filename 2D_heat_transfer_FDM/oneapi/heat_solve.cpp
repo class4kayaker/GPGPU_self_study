@@ -163,10 +163,10 @@ void MGLevel<T>::initAfromK(
       const T denom_y = 1.0 / (2.0 * dy * dy);
 
       const T k_c = ptr_k[offset_idx(idx, 1, 1)];
-      const T k_xm = ptr_k[offset_idx(idx, 1, 0)];
-      const T k_xp = ptr_k[offset_idx(idx, 1, 2)];
-      const T k_ym = ptr_k[offset_idx(idx, 0, 1)];
-      const T k_yp = ptr_k[offset_idx(idx, 2, 1)];
+      const T k_xm = ptr_k[offset_idx(idx, 0, 1)];
+      const T k_xp = ptr_k[offset_idx(idx, 2, 1)];
+      const T k_ym = ptr_k[offset_idx(idx, 1, 0)];
+      const T k_yp = ptr_k[offset_idx(idx, 1, 2)];
 
       cl::sycl::id<3> m_cen_idx(0, idx[1], idx[0]);
       cl::sycl::id<3> m_x_idx(1, idx[1], idx[0]);
@@ -177,9 +177,9 @@ void MGLevel<T>::initAfromK(
       ptr_matrix[m_cen_idx] = (2.0 * k_c + k_xm + k_xp) * denom_x +
                               (2.0 * k_c + k_ym + k_yp) * denom_y;
 
-      ptr_matrix[m_x_idx] = (idx[1] > 0) ? -1.0 * (k_c + k_xm) * denom_x : 0.0;
+      ptr_matrix[m_x_idx] = (idx[0] > 0) ? -1.0 * (k_c + k_xm) * denom_x : 0.0;
 
-      ptr_matrix[m_y_idx] = (idx[0] > 0) ? -1.0 * (k_c + k_ym) * denom_y : 0.0;
+      ptr_matrix[m_y_idx] = (idx[1] > 0) ? -1.0 * (k_c + k_ym) * denom_y : 0.0;
       ptr_matrix[m_xpy_idx] = 0.0;
       ptr_matrix[m_xmy_idx] = 0.0;
     });
@@ -211,26 +211,26 @@ void MGLevel<T>::initRHS(const std::unique_ptr<cl::sycl::queue> &queue,
           const bool x_m = (idx[1] > 0), x_p = (idx[1] < ndx - 2),
                      y_m = (idx[0] > 0), y_p = (idx[0] < ndy - 2);
 
-          cl::sycl::id<2> h5idx(idx[1], idx[0]);
+          cl::sycl::id<2> h5idx(idx[1]+1, idx[0]+1);
 
           ptr_rhs[idx] = ptr_heat_source[offset_idx(h5idx, 1, 1)];
 
           if (!x_m)
-            ptr_rhs[idx] += (ptr_k[offset_idx(h5idx, 1, 0)] +
-                             ptr_k[offset_idx(h5idx, 1, 1)]) *
-                            denom_x * ptr_temperature[offset_idx(h5idx, 1, 0)];
+            ptr_rhs[idx] += (ptr_k[offset_idx(h5idx, -1, 0)] +
+                             ptr_k[offset_idx(h5idx, 0, 0)]) *
+                            denom_x * ptr_temperature[offset_idx(h5idx, -1, 0)];
           if (!x_p)
-            ptr_rhs[idx] += (ptr_k[offset_idx(h5idx, 1, 2)] +
-                             ptr_k[offset_idx(h5idx, 1, 1)]) *
-                            denom_x * ptr_temperature[offset_idx(h5idx, 1, 2)];
+            ptr_rhs[idx] += (ptr_k[offset_idx(h5idx, 0, 0)] +
+                             ptr_k[offset_idx(h5idx, 1, 0)]) *
+                            denom_x * ptr_temperature[offset_idx(h5idx, 1, 0)];
           if (!y_m)
-            ptr_rhs[idx] += (ptr_k[offset_idx(h5idx, 0, 1)] +
-                             ptr_k[offset_idx(h5idx, 1, 1)]) *
-                            denom_y * ptr_temperature[offset_idx(h5idx, 0, 1)];
+            ptr_rhs[idx] += (ptr_k[offset_idx(h5idx, 0, -1)] +
+                             ptr_k[offset_idx(h5idx, 0, 0)]) *
+                            denom_y * ptr_temperature[offset_idx(h5idx, 0, -1)];
           if (!y_p)
-            ptr_rhs[idx] += (ptr_k[offset_idx(h5idx, 2, 1)] +
-                             ptr_k[offset_idx(h5idx, 1, 1)]) *
-                            denom_y * ptr_temperature[offset_idx(h5idx, 2, 1)];
+            ptr_rhs[idx] += (ptr_k[offset_idx(h5idx, 0, 0)] +
+                             ptr_k[offset_idx(h5idx, 0, 1)]) *
+                            denom_y * ptr_temperature[offset_idx(h5idx, 0, 1)];
         });
   });
 }

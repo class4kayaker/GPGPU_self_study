@@ -24,3 +24,16 @@ def MMS_Sine(k: int) -> FDM_State:
     )
     state.temperature = (xv ** 2 - xv ** 4) * (yv ** 2 - yv ** 4)
     return state
+
+
+@register_init("MMS_linear", includes_soln=True)
+def MMS_Sine(k: int) -> FDM_State:
+    assert k > 0
+    ndx = 2 ** k
+    dx = 1.0 / ndx
+    state = FDM_State(ndx, ndx, dx, dx)
+    xv, yv = state.get_pos()
+    state.k[:, :] = 1.0
+    state.heat_source[:, :] = 0.0
+    state.temperature = 0.5*xv+0.5*yv
+    return state
