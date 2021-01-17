@@ -77,12 +77,17 @@ template <typename T> struct MGLevel {
   void initAfromK(const std::unique_ptr<cl::sycl::queue> &queue,
                   cl::sycl::buffer<T, 2> &prob_k);
 
+  void initRHS(const std::unique_ptr<cl::sycl::queue> &queue,
+               cl::sycl::buffer<T, 2> &prob_k,
+               cl::sycl::buffer<T, 2> &heat_source,
+               cl::sycl::buffer<T, 2> temperature);
+
   void mult(const std::unique_ptr<cl::sycl::queue> &queue,
             cl::sycl::buffer<T, 2> &in, cl::sycl::buffer<T, 2> &out);
 
   // Host data
-  const size_t ndx, ndy;
-  const T dx, dy;
+  const size_t m_ndx, m_ndy;
+  const T m_dx, m_dy;
 
   // Buffers
   cl::sycl::buffer<T, 3> matrix;
@@ -93,14 +98,14 @@ template <typename T> struct MGLevel {
 template <typename T>
 MGLevel<T>::MGLevel(const size_t a_ndx, const size_t a_ndy, const T a_dx,
                     const T a_dy)
-    : ndx(a_ndx), ndy(a_ndy), dx(a_dx), dy(a_dx),
-      matrix(cl::sycl::range<3>(5, ndx - 1, ndy - 1)),
-      u(cl::sycl::range<2>(ndx - 1, ndy - 1)),
-      rhs(cl::sycl::range<2>(ndx - 1, ndy - 1)) {}
+    : m_ndx(a_ndx), m_ndy(a_ndy), m_dx(a_dx), m_dy(a_dx),
+      matrix(cl::sycl::range<3>(5, m_ndy - 1, m_ndx - 1)),
+      u(cl::sycl::range<2>(m_ndy - 1, m_ndx - 1)),
+      rhs(cl::sycl::range<2>(m_ndy - 1, m_ndx - 1)) {}
 
 template <typename T> MGLevel<T> MGLevel<T>::coarseLevel() {
-  const size_t n_ndx = ndx / 2, n_ndy = ndy / 2;
-  const T n_dx = 2.0 * dx, n_dy = 2.0 * dy;
+  const size_t n_ndx = m_ndx / 2, n_ndy = m_ndy / 2;
+  const T n_dx = 2.0 * m_dx, n_dy = 2.0 * m_dy;
   return MGLevel<T>(n_ndx, n_ndy, n_dx, n_dy);
 }
 
@@ -109,15 +114,17 @@ void MGLevel<T>::initAfromK(
     const std::unique_ptr<cl::sycl::queue> &device_queue,
     cl::sycl::buffer<T, 2> &prob_k) {
   device_queue->submit([&](cl::sycl::handler &cgh) {
-    size_t ndx = ndx;
-    size_t ndy = ndy;
-    T dx = dx;
-    T dy = dy;
+    size_t ndx = m_ndx;
+    size_t ndy = m_ndy;
+    T dx = m_dx;
+    T dy = m_dy;
     auto ptr_k = prob_k.template get_access<cl::sycl::access::mode::read>(cgh);
     auto ptr_matrix =
         matrix.template get_access<cl::sycl::access::mode::discard_write>(cgh);
+
+    cl::sycl::range<2> rng(ndy -1, ndx -1);
     cgh.parallel_for(
-        cl::sycl::range<2>(ndy - 1, ndx - 1), [=](cl::sycl::id<2> idx) {
+        rng, [=](cl::sycl::id<2> idx) {
           const T denom_x = 1.0 / (2.0 * dx * dx);
           const T denom_y = 1.0 / (2.0 * dy * dy);
 
@@ -143,6 +150,55 @@ void MGLevel<T>::initAfromK(
               (idx[0] > 0) ? -1.0 * (k_c + k_ym) / denom_y : 0.0;
           ptr_matrix[m_xpy_idx] = 0.0;
           ptr_matrix[m_xmy_idx] = 0.0;
+        });
+  });
+}
+
+template <typename T>
+void MGLevel<T>::initRHS(const std::unique_ptr<cl::sycl::queue> &queue,
+                         cl::sycl::buffer<T, 2> &prob_k,
+                         cl::sycl::buffer<T, 2> &heat_source,
+                         cl::sycl::buffer<T, 2> temperature) {
+  queue->submit([&](cl::sycl::handler &cgh) {
+    size_t ndx = m_ndx;
+    size_t ndy = m_ndy;
+    T dx = m_dx;
+    T dy = m_dy;
+    auto ptr_k = prob_k.template get_access<cl::sycl::access::mode::read>(cgh);
+    auto ptr_heat_source =
+        heat_source.template get_access<cl::sycl::access::mode::read>(cgh);
+    auto ptr_temperature =
+        temperature.template get_access<cl::sycl::access::mode::read>(cgh);
+    auto ptr_rhs =
+        rhs.template get_access<cl::sycl::access::mode::discard_write>(cgh);
+    cgh.parallel_for(
+        cl::sycl::range<2>(ndy - 1, ndx - 1), [=](cl::sycl::id<2> idx) {
+          const T denom_x = 1.0 / (2.0 * dx * dx);
+          const T denom_y = 1.0 / (2.0 * dy * dy);
+
+          const bool x_m = (idx[1] > 0), x_p = (idx[1] < ndx - 2),
+                     y_m = (idx[0] > 0), y_p = (idx[0] < ndy - 2);
+
+          cl::sycl::id<2> h5idx(idx[1], idx[0]);
+
+          ptr_rhs[idx] = ptr_heat_source[offset_idx(h5idx, 1, 1)];
+
+          if (!x_m)
+            ptr_rhs[idx] += (ptr_k[offset_idx(h5idx, 1, 0)] +
+                             ptr_k[offset_idx(h5idx, 1, 1)]) *
+                            ptr_temperature[offset_idx(h5idx, 1, 0)];
+          if (!x_p)
+            ptr_rhs[idx] += (ptr_k[offset_idx(h5idx, 1, 2)] +
+                             ptr_k[offset_idx(h5idx, 1, 1)]) *
+                            ptr_temperature[offset_idx(h5idx, 1, 2)];
+          if (!y_m)
+            ptr_rhs[idx] += (ptr_k[offset_idx(h5idx, 0, 1)] +
+                             ptr_k[offset_idx(h5idx, 1, 1)]) *
+                            ptr_temperature[offset_idx(h5idx, 0, 1)];
+          if (!y_p)
+            ptr_rhs[idx] += (ptr_k[offset_idx(h5idx, 2, 1)] +
+                             ptr_k[offset_idx(h5idx, 1, 1)]) *
+                            ptr_temperature[offset_idx(h5idx, 2, 1)];
         });
   });
 }
@@ -180,27 +236,25 @@ void MGLevel<T>::mult(const std::unique_ptr<cl::sycl::queue> &queue,
                             ptr_in[offset_idx(idx, 1, 0)];
 
           if (x_m && y_m)
-              ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 3, 0, 0)] *
-                  ptr_in[offset_idx(idx, -1, -1)];
+            ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 3, 0, 0)] *
+                            ptr_in[offset_idx(idx, -1, -1)];
           if (x_p && y_p)
-              ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 3, 1, 1)] *
-                  ptr_in[offset_idx(idx, 1, 1)];
+            ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 3, 1, 1)] *
+                            ptr_in[offset_idx(idx, 1, 1)];
 
           if (x_m && y_p)
-              ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 4, 0, 0)] *
-                  ptr_in[offset_idx(idx, -1, 1)];
+            ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 4, 0, 0)] *
+                            ptr_in[offset_idx(idx, -1, 1)];
           if (x_p && y_m)
-              ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 4, 1, -1)] *
-                  ptr_in[offset_idx(idx, 1, -1)];
+            ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 4, 1, -1)] *
+                            ptr_in[offset_idx(idx, 1, -1)];
         });
   });
 }
 
 // Useful functors
-template <typename T> class GenAFromK {};
 class RHSFromF {};
 class CoarsenA {};
-class AMult {};
 class InterpolateU {};
 class FullWeightU {};
 class SmoothWJ {};
@@ -311,19 +365,19 @@ void do_computation(const Model_Data::ProblemConfig &config,
     // Base data buffers
     cl::sycl::buffer<T, 2> prob_temp(
         solution.temperature.data(),
-        cl::sycl::range<2>(problem.ndy + 1, problem.ndx + 1));
+        cl::sycl::range<2>(problem.ndx + 1, problem.ndy + 1));
     cl::sycl::buffer<T, 2> prob_k(
         solution.k.data(),
-        cl::sycl::range<2>(problem.ndy + 1, problem.ndx + 1));
+        cl::sycl::range<2>(problem.ndx + 1, problem.ndy + 1));
     cl::sycl::buffer<T, 2> prob_heat(
         solution.heat_source.data(),
-        cl::sycl::range<2>(problem.ndy + 1, problem.ndx + 1));
+        cl::sycl::range<2>(problem.ndx + 1, problem.ndy + 1));
 
     // Multigrid setup
     std::vector<MGLevel<T>> grids;
     grids.push_back(
         MGLevel<T>(problem.ndx, problem.ndy, problem.hx, problem.hy));
-    while (grids.back().ndx > 1 && grids.back().ndy > 1) {
+    while (grids.back().m_ndx > 2 && grids.back().m_ndy > 2) {
       grids.push_back(grids.back().coarseLevel());
     }
 
@@ -331,6 +385,7 @@ void do_computation(const Model_Data::ProblemConfig &config,
     {
       auto front_grid = grids.front();
       front_grid.initAfromK(device_queue, prob_k);
+      front_grid.initRHS(device_queue, prob_k, prob_heat, prob_temp);
     }
 
     // Solution computation
