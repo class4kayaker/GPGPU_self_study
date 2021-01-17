@@ -99,6 +99,28 @@ void write_buffer(std::string name, cl::sycl::buffer<T, 3> b) {
   }
 }
 
+// Problem data class w/ sycl buffers
+
+template <typename T> struct SYCL_ModelData {
+  SYCL_ModelData<T>(Model_Data::ModelState<T> &state);
+  size_t ndx, ndy;
+  T hx, hy;
+
+  cl::sycl::buffer<T, 2> k;
+  cl::sycl::buffer<T, 2> heat_source;
+  cl::sycl::buffer<T, 2> temperature;
+};
+
+template <typename T>
+SYCL_ModelData<T>::SYCL_ModelData(Model_Data::ModelState<T> &state)
+    : ndx(state.ndx), ndy(state.ndy), hx(state.hx), hy(state.hy),
+      k(state.k.data(), cl::sycl::range<2>(ndx + 1, ndy + 1)),
+      heat_source(state.heat_source.data(),
+                  cl::sycl::range<2>(ndx + 1, ndy + 1)),
+      temperature(state.temperature.data(),
+                  cl::sycl::range<2>(ndx + 1, ndy + 1)) {
+}
+
 // Multigrid grid class
 
 template <typename T> struct MGLevel {
@@ -109,13 +131,13 @@ template <typename T> struct MGLevel {
   void initAfromK(const std::unique_ptr<cl::sycl::queue> &queue,
                   cl::sycl::buffer<T, 2> &prob_k);
 
-  void initRHS(const std::unique_ptr<cl::sycl::queue> &queue,
-               cl::sycl::buffer<T, 2> &prob_k,
-               cl::sycl::buffer<T, 2> &heat_source,
-               cl::sycl::buffer<T, 2> temperature);
-
   void setU(const std::unique_ptr<cl::sycl::queue> &queue,
-            cl::sycl::buffer<T, 2> &prob_temp);
+            cl::sycl::buffer<T, 2> &u_in);
+
+  void zeroU(const std::unique_ptr<cl::sycl::queue> &queue);
+
+  void setRHS(const std::unique_ptr<cl::sycl::queue> &queue,
+            cl::sycl::buffer<T, 2> &u_in);
 
   void mult(const std::unique_ptr<cl::sycl::queue> &queue,
             cl::sycl::buffer<T, 2> &in, cl::sycl::buffer<T, 2> &out);
@@ -187,55 +209,6 @@ void MGLevel<T>::initAfromK(
 }
 
 template <typename T>
-void MGLevel<T>::initRHS(const std::unique_ptr<cl::sycl::queue> &queue,
-                         cl::sycl::buffer<T, 2> &prob_k,
-                         cl::sycl::buffer<T, 2> &heat_source,
-                         cl::sycl::buffer<T, 2> temperature) {
-  queue->submit([&](cl::sycl::handler &cgh) {
-    size_t ndx = m_ndx;
-    size_t ndy = m_ndy;
-    T dx = m_dx;
-    T dy = m_dy;
-    auto ptr_k = prob_k.template get_access<cl::sycl::access::mode::read>(cgh);
-    auto ptr_heat_source =
-        heat_source.template get_access<cl::sycl::access::mode::read>(cgh);
-    auto ptr_temperature =
-        temperature.template get_access<cl::sycl::access::mode::read>(cgh);
-    auto ptr_rhs =
-        rhs.template get_access<cl::sycl::access::mode::discard_write>(cgh);
-    cgh.parallel_for(
-        cl::sycl::range<2>(ndy - 1, ndx - 1), [=](cl::sycl::id<2> idx) {
-          const T denom_x = 1.0 / (2.0 * dx * dx);
-          const T denom_y = 1.0 / (2.0 * dy * dy);
-
-          const bool x_m = (idx[1] > 0), x_p = (idx[1] < ndx - 2),
-                     y_m = (idx[0] > 0), y_p = (idx[0] < ndy - 2);
-
-          cl::sycl::id<2> h5idx(idx[1]+1, idx[0]+1);
-
-          ptr_rhs[idx] = ptr_heat_source[offset_idx(h5idx, 1, 1)];
-
-          if (!x_m)
-            ptr_rhs[idx] += (ptr_k[offset_idx(h5idx, -1, 0)] +
-                             ptr_k[offset_idx(h5idx, 0, 0)]) *
-                            denom_x * ptr_temperature[offset_idx(h5idx, -1, 0)];
-          if (!x_p)
-            ptr_rhs[idx] += (ptr_k[offset_idx(h5idx, 0, 0)] +
-                             ptr_k[offset_idx(h5idx, 1, 0)]) *
-                            denom_x * ptr_temperature[offset_idx(h5idx, 1, 0)];
-          if (!y_m)
-            ptr_rhs[idx] += (ptr_k[offset_idx(h5idx, 0, -1)] +
-                             ptr_k[offset_idx(h5idx, 0, 0)]) *
-                            denom_y * ptr_temperature[offset_idx(h5idx, 0, -1)];
-          if (!y_p)
-            ptr_rhs[idx] += (ptr_k[offset_idx(h5idx, 0, 0)] +
-                             ptr_k[offset_idx(h5idx, 0, 1)]) *
-                            denom_y * ptr_temperature[offset_idx(h5idx, 0, 1)];
-        });
-  });
-}
-
-template <typename T>
 void MGLevel<T>::mult(const std::unique_ptr<cl::sycl::queue> &queue,
                       cl::sycl::buffer<T, 2> &in, cl::sycl::buffer<T, 2> &out) {
   queue->submit([&](cl::sycl::handler &cgh) {
@@ -286,22 +259,51 @@ void MGLevel<T>::mult(const std::unique_ptr<cl::sycl::queue> &queue,
 
 template <typename T>
 void MGLevel<T>::setU(const std::unique_ptr<cl::sycl::queue> &queue,
-                      cl::sycl::buffer<T, 2> &prob_temp) {
+                      cl::sycl::buffer<T, 2> &u_in) {
   queue->submit([&](cl::sycl::handler &cgh) {
     size_t ndx = m_ndx;
     size_t ndy = m_ndy;
-    auto ptr_prob_temp =
-        prob_temp.template get_access<cl::sycl::access::mode::read>(cgh);
+    auto ptr_u_in = u_in.template get_access<cl::sycl::access::mode::read>(cgh);
+    auto ptr_u =
+        u.template get_access<cl::sycl::access::mode::discard_write>(cgh);
+    cgh.parallel_for(cl::sycl::range<2>(ndy - 1, ndx - 1),
+                     [=](cl::sycl::id<2> idx) { ptr_u[idx] = ptr_u_in[idx]; });
+  });
+}
+
+template <typename T>
+void MGLevel<T>::setRHS(const std::unique_ptr<cl::sycl::queue> &queue,
+                        cl::sycl::buffer<T, 2> &rhs_in) {
+  queue->submit([&](cl::sycl::handler &cgh) {
+    size_t ndx = m_ndx;
+    size_t ndy = m_ndy;
+    auto ptr_rhs_in =
+        rhs_in.template get_access<cl::sycl::access::mode::read>(cgh);
+    auto ptr_rhs =
+        rhs.template get_access<cl::sycl::access::mode::discard_write>(cgh);
+    cgh.parallel_for(
+        cl::sycl::range<2>(ndy - 1, ndx - 1),
+        [=](cl::sycl::id<2> idx) { ptr_rhs[idx] = ptr_rhs_in[idx]; });
+  });
+}
+
+template <typename T>
+void MGLevel<T>::zeroU(const std::unique_ptr<cl::sycl::queue> &queue) {
+  queue->submit([&](cl::sycl::handler &cgh) {
+    size_t ndx = m_ndx;
+    size_t ndy = m_ndy;
     auto ptr_u =
         u.template get_access<cl::sycl::access::mode::discard_write>(cgh);
     cgh.parallel_for(cl::sycl::range<2>(ndy - 1, ndx - 1),
                      [=](cl::sycl::id<2> idx) {
                        cl::sycl::id<2> h5idx(idx[1], idx[0]);
 
-                       ptr_u[idx] = ptr_prob_temp[offset_idx(h5idx, 1, 1)];
+                       ptr_u[idx] = 0.0;
                      });
   });
 }
+
+// Interpolate and weight
 
 template <typename T>
 void interpolateU(const std::unique_ptr<cl::sycl::queue> &queue,
@@ -382,10 +384,87 @@ void fullWeightU(const std::unique_ptr<cl::sycl::queue> &queue,
   });
 }
 
+// Copy data into local format
+
+template <typename T>
+void initU(const std::unique_ptr<cl::sycl::queue> &queue,
+           SYCL_ModelData<T> &problem, cl::sycl::buffer<T, 2> &u) {
+  queue->submit([&](cl::sycl::handler &cgh) {
+    size_t ndx = problem.ndx;
+    size_t ndy = problem.ndy;
+    auto ptr_prob_temp =
+        problem.temperature.template get_access<cl::sycl::access::mode::read>(
+            cgh);
+    auto ptr_u =
+        u.template get_access<cl::sycl::access::mode::discard_write>(cgh);
+    cgh.parallel_for(cl::sycl::range<2>(ndy - 1, ndx - 1),
+                     [=](cl::sycl::id<2> idx) {
+                       cl::sycl::id<2> h5idx(idx[1], idx[0]);
+
+                       ptr_u[idx] = ptr_prob_temp[offset_idx(h5idx, 1, 1)];
+                     });
+  });
+}
+
+template <typename T>
+void initRHS(const std::unique_ptr<cl::sycl::queue> &queue,
+             SYCL_ModelData<T> &problem, cl::sycl::buffer<T, 2> &rhs) {
+  queue->submit([&](cl::sycl::handler &cgh) {
+    size_t ndx = problem.ndx;
+    size_t ndy = problem.ndy;
+    T dx = problem.hx;
+    T dy = problem.hy;
+    auto ptr_k =
+        problem.k.template get_access<cl::sycl::access::mode::read>(cgh);
+    auto ptr_heat_source =
+        problem.heat_source.template get_access<cl::sycl::access::mode::read>(
+            cgh);
+    auto ptr_temperature =
+        problem.temperature.template get_access<cl::sycl::access::mode::read>(
+            cgh);
+    auto ptr_rhs =
+        rhs.template get_access<cl::sycl::access::mode::discard_write>(cgh);
+    cgh.parallel_for(
+        cl::sycl::range<2>(ndy - 1, ndx - 1), [=](cl::sycl::id<2> idx) {
+          const T denom_x = 1.0 / (2.0 * dx * dx);
+          const T denom_y = 1.0 / (2.0 * dy * dy);
+
+          const bool x_m = (idx[1] > 0), x_p = (idx[1] < ndx - 2),
+                     y_m = (idx[0] > 0), y_p = (idx[0] < ndy - 2);
+
+          cl::sycl::id<2> h5idx(idx[1] + 1, idx[0] + 1);
+
+          ptr_rhs[idx] = ptr_heat_source[offset_idx(h5idx, 1, 1)];
+
+          if (!x_m)
+            ptr_rhs[idx] += (ptr_k[offset_idx(h5idx, -1, 0)] +
+                             ptr_k[offset_idx(h5idx, 0, 0)]) *
+                            denom_x * ptr_temperature[offset_idx(h5idx, -1, 0)];
+          if (!x_p)
+            ptr_rhs[idx] += (ptr_k[offset_idx(h5idx, 0, 0)] +
+                             ptr_k[offset_idx(h5idx, 1, 0)]) *
+                            denom_x * ptr_temperature[offset_idx(h5idx, 1, 0)];
+          if (!y_m)
+            ptr_rhs[idx] += (ptr_k[offset_idx(h5idx, 0, -1)] +
+                             ptr_k[offset_idx(h5idx, 0, 0)]) *
+                            denom_y * ptr_temperature[offset_idx(h5idx, 0, -1)];
+          if (!y_p)
+            ptr_rhs[idx] += (ptr_k[offset_idx(h5idx, 0, 0)] +
+                             ptr_k[offset_idx(h5idx, 0, 1)]) *
+                            denom_y * ptr_temperature[offset_idx(h5idx, 0, 1)];
+        });
+  });
+}
+
+// Dot product
+
+template <typename T>
+void dot_product(const std::unique_ptr<cl::sycl::queue> &queue,
+                 const DeviceConfig &d_config, cl::sycl::buffer<T, 2> &u1,
+                 cl::sycl::buffer<T, 2> &u2, cl::sycl::buffer<T, 1> &f_val) {}
+
 // Useful functors
 class CoarsenA {};
-class InterpolateU {};
-class FullWeightU {};
 class SmoothWJ {};
 class DotProduct {};
 
@@ -485,23 +564,19 @@ void do_computation(const Model_Data::ProblemConfig &config,
       if (i == 0 || i == problem.ndy || j == 0 || j == problem.ndx) {
         solution.temperature[arr_ind] = problem.temperature[arr_ind];
       } else {
-        solution.temperature[arr_ind] = problem.temperature[arr_ind];
-        // solution.temperature[arr_ind] = 0.0;
+        solution.temperature[arr_ind] = 0.0;
       }
     }
   }
 
   {
     // Base data buffers
-    cl::sycl::buffer<T, 2> prob_temp(
-        solution.temperature.data(),
-        cl::sycl::range<2>(problem.ndx + 1, problem.ndy + 1));
-    cl::sycl::buffer<T, 2> prob_k(
-        solution.k.data(),
-        cl::sycl::range<2>(problem.ndx + 1, problem.ndy + 1));
-    cl::sycl::buffer<T, 2> prob_heat(
-        solution.heat_source.data(),
-        cl::sycl::range<2>(problem.ndx + 1, problem.ndy + 1));
+    SYCL_ModelData<T> sycl_modeldata(solution);
+    cl::sycl::buffer<T, 2> u(cl::sycl::range<2>(sycl_modeldata.ndy-1, sycl_modeldata.ndx-1));
+    cl::sycl::buffer<T, 2> f(cl::sycl::range<2>(sycl_modeldata.ndy-1, sycl_modeldata.ndx-1));
+
+    initU(device_queue, sycl_modeldata, u);
+    initRHS(device_queue, sycl_modeldata, f);
 
     // Multigrid setup
     std::vector<MGLevel<T>> grids;
@@ -511,20 +586,13 @@ void do_computation(const Model_Data::ProblemConfig &config,
       grids.push_back(grids.back().coarseLevel());
     }
 
+
     // Do necessary init for MG
     {
       auto front_grid = grids.front();
-      front_grid.initAfromK(device_queue, prob_k);
-      front_grid.initRHS(device_queue, prob_k, prob_heat, prob_temp);
-      cl::sycl::buffer<T, 2> mult_rhs(
-          cl::sycl::range<2>(front_grid.m_ndy - 1, front_grid.m_ndx - 1));
-      front_grid.setU(device_queue, prob_temp);
-      front_grid.mult(device_queue, front_grid.u, mult_rhs);
+      front_grid.initAfromK(device_queue, sycl_modeldata.k);
 
-      write_buffer("A", front_grid.matrix);
-      write_buffer("U", front_grid.u);
-      write_buffer("Mult RHS", mult_rhs);
-      write_buffer("P RHS", front_grid.rhs);
+      // Initialize Coarsened matricies
     }
 
     // Solution computation
