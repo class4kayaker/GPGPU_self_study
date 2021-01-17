@@ -1,12 +1,19 @@
 import sys
 import argparse
 
-from fdm_heat_validation_utility import init_by_name
+from fdm_heat_validation_utility import init_by_name, FDM_State, FDM_Diff
 
 
 def generate_init(args):
     init_cond = init_by_name[args.init](args.k)
     init_cond.to_h5(args.output)
+
+
+def diff_output(args):
+    state1 = FDM_State.from_h5(args.file1)
+    state2 = FDM_State.from_h5(args.file2)
+    diff = FDM_Diff(state1, state2)
+    print(diff.pprint_string())
 
 
 def parse_args(args):
@@ -46,6 +53,16 @@ def parse_args(args):
     )
 
     init_create_parser.set_defaults(utilcall=generate_init)
+
+    diff_parser = subparsers.add_parser(
+        "diff", description="Compare two output files"
+    )
+
+    diff_parser.add_argument("file1", help="File 1")
+
+    diff_parser.add_argument("file2", help="File 2")
+
+    diff_parser.set_defaults(utilcall=diff_output)
 
     return parser.parse_args(args)
 

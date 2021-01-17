@@ -25,6 +25,19 @@ class FDM_State:
             f["source"] = self.heat_source
             f["temperature"] = self.temperature
 
+    @classmethod
+    def from_h5(cls, h5fn):
+        with h5py.File(h5fn, "r") as f:
+            dx = f["dx"][()]
+            dy = f["dy"][()]
+            k = f["K"][:, :]
+            ndx, ndy = k.shape
+            ret = cls(ndx, ndy, dx, dy)
+            ret.k = k
+            ret.heat_source = f["source"][:, :]
+            ret.temperature = f["temperature"][:, :]
+            return ret
+
     def get_pos(self):
         x = numpy.linspace(0.0, self.ndx * self.dx, self.ndx + 1)
         y = numpy.linspace(0.0, self.ndy * self.dy, self.ndy + 1)
