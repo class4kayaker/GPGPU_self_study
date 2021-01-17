@@ -11,6 +11,7 @@
 
 struct DeviceConfig {
   std::string device_name;
+  size_t wg_size;
 };
 
 template <typename T>
@@ -29,6 +30,7 @@ int main(int argc, char *argv[]) {
 
     const auto dev_table = toml::find(input_config, "Device");
     d_config.device_name = toml::find_or<std::string>(dev_table, "Name", "");
+    d_config.wg_size = toml::find_or<int>(dev_table, "WG size", 64);
   }
 
   Model_Data::ModelState<double> problem_state({});
@@ -68,6 +70,17 @@ static inline cl::sycl::id<3> offset_idx(cl::sycl::id<3> i_idx, int ii, int jj,
 }
 
 // convenience write fns
+template <typename T>
+void write_buffer(std::string name, cl::sycl::buffer<T, 1> b) {
+  cl::sycl::range<1> r = b.get_range();
+  auto acc_b = b.template get_access<cl::sycl::access::mode::read>();
+  std::cout << name << ":" << std::endl;
+  for (size_t i = 0; i < r[0]; ++i) {
+    cl::sycl::id<1> idx(i);
+    std::cout << acc_b[idx] << " ";
+  }
+  std::cout << std::endl;
+}
 template <typename T>
 void write_buffer(std::string name, cl::sycl::buffer<T, 2> b) {
   cl::sycl::range<2> r = b.get_range();
@@ -141,9 +154,9 @@ template <typename T> struct MGLevel {
   void mult(const std::unique_ptr<cl::sycl::queue> &queue,
             cl::sycl::buffer<T, 2> &in, cl::sycl::buffer<T, 2> &out);
 
-  void mult_py(const std::unique_ptr<cl::sycl::queue> &queue,
-               cl::sycl::buffer<T, 2> &in, sycl::buffer<T, 2> &y,
-               cl::sycl::buffer<T, 2> &out);
+  void resid(const std::unique_ptr<cl::sycl::queue> &queue,
+             cl::sycl::buffer<T, 2> &u_in, sycl::buffer<T, 2> &f_in,
+             cl::sycl::buffer<T, 2> &out);
 
   // Host data
   const size_t m_ndx, m_ndy;
@@ -222,94 +235,96 @@ void MGLevel<T>::mult(const std::unique_ptr<cl::sycl::queue> &queue,
         matrix.template get_access<cl::sycl::access::mode::read>(cgh);
     auto ptr_out =
         out.template get_access<cl::sycl::access::mode::discard_write>(cgh);
-    cgh.parallel_for(
-        cl::sycl::range<2>(ndy - 1, ndx - 1), [=](cl::sycl::id<2> idx) {
-          cl::sycl::id<3> mat_idx(0, idx[0], idx[1]);
+    cgh.parallel_for(cl::sycl::range<2>(ndy - 1, ndx - 1),
+                     [=](cl::sycl::id<2> idx) {
+                       cl::sycl::id<3> mat_idx(0, idx[0], idx[1]);
 
-          const bool x_m = (idx[1] > 0), x_p = (idx[1] < ndx - 2),
-                     y_m = (idx[0] > 0), y_p = (idx[0] < ndy - 2);
+                       const bool x_m = (idx[1] > 0), x_p = (idx[1] < ndx - 2),
+                                  y_m = (idx[0] > 0), y_p = (idx[0] < ndy - 2);
 
-          ptr_out[idx] = ptr_matrix[mat_idx] * ptr_in[idx];
-          if (x_m)
-            ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 1, 0, 0)] *
-                            ptr_in[offset_idx(idx, 0, -1)];
-          if (x_p)
-            ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 1, 0, 1)] *
-                            ptr_in[offset_idx(idx, 0, 1)];
-          if (y_m)
-            ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 2, 0, 0)] *
-                            ptr_in[offset_idx(idx, -1, 0)];
-          if (y_p)
-            ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 2, 1, 0)] *
-                            ptr_in[offset_idx(idx, 1, 0)];
+                       T out = ptr_matrix[mat_idx] * ptr_in[idx];
+                       if (x_m)
+                         out += ptr_matrix[offset_idx(mat_idx, 1, 0, 0)] *
+                                ptr_in[offset_idx(idx, 0, -1)];
+                       if (x_p)
+                         out += ptr_matrix[offset_idx(mat_idx, 1, 0, 1)] *
+                                ptr_in[offset_idx(idx, 0, 1)];
+                       if (y_m)
+                         out += ptr_matrix[offset_idx(mat_idx, 2, 0, 0)] *
+                                ptr_in[offset_idx(idx, -1, 0)];
+                       if (y_p)
+                         out += ptr_matrix[offset_idx(mat_idx, 2, 1, 0)] *
+                                ptr_in[offset_idx(idx, 1, 0)];
 
-          if (x_m && y_m)
-            ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 3, 0, 0)] *
-                            ptr_in[offset_idx(idx, -1, -1)];
-          if (x_p && y_p)
-            ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 3, 1, 1)] *
-                            ptr_in[offset_idx(idx, 1, 1)];
+                       if (x_m && y_m)
+                         out += ptr_matrix[offset_idx(mat_idx, 3, 0, 0)] *
+                                ptr_in[offset_idx(idx, -1, -1)];
+                       if (x_p && y_p)
+                         out += ptr_matrix[offset_idx(mat_idx, 3, 1, 1)] *
+                                ptr_in[offset_idx(idx, 1, 1)];
 
-          if (x_m && y_p)
-            ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 4, 0, 0)] *
-                            ptr_in[offset_idx(idx, -1, 1)];
-          if (x_p && y_m)
-            ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 4, 1, -1)] *
-                            ptr_in[offset_idx(idx, 1, -1)];
-        });
+                       if (x_m && y_p)
+                         out += ptr_matrix[offset_idx(mat_idx, 4, 0, 0)] *
+                                ptr_in[offset_idx(idx, -1, 1)];
+                       if (x_p && y_m)
+                         out += ptr_matrix[offset_idx(mat_idx, 4, 1, -1)] *
+                                ptr_in[offset_idx(idx, 1, -1)];
+
+                       ptr_out[idx] = out;
+                     });
   });
 }
 
 template <typename T>
-void MGLevel<T>::mult_py(const std::unique_ptr<cl::sycl::queue> &queue,
-                         cl::sycl::buffer<T, 2> &in, sycl::buffer<T, 2> &yv,
-                         cl::sycl::buffer<T, 2> &out) {
+void MGLevel<T>::resid(const std::unique_ptr<cl::sycl::queue> &queue,
+                       cl::sycl::buffer<T, 2> &u_in, sycl::buffer<T, 2> &f_in,
+                       cl::sycl::buffer<T, 2> &out) {
   queue->submit([&](cl::sycl::handler &cgh) {
     size_t ndx = m_ndx;
     size_t ndy = m_ndy;
-    auto ptr_in = in.template get_access<cl::sycl::access::mode::read>(cgh);
-    auto ptr_yv = yv.template get_access<cl::sycl::access::mode::read>(cgh);
+    auto ptr_in = u_in.template get_access<cl::sycl::access::mode::read>(cgh);
+    auto ptr_f_in = f_in.template get_access<cl::sycl::access::mode::read>(cgh);
     auto ptr_matrix =
         matrix.template get_access<cl::sycl::access::mode::read>(cgh);
     auto ptr_out =
         out.template get_access<cl::sycl::access::mode::discard_write>(cgh);
-    cgh.parallel_for(
-        cl::sycl::range<2>(ndy - 1, ndx - 1), [=](cl::sycl::id<2> idx) {
-          cl::sycl::id<3> mat_idx(0, idx[0], idx[1]);
+    cgh.parallel_for(cl::sycl::range<2>(ndy - 1, ndx - 1),
+                     [=](cl::sycl::id<2> idx) {
+                       cl::sycl::id<3> mat_idx(0, idx[0], idx[1]);
 
-          const bool x_m = (idx[1] > 0), x_p = (idx[1] < ndx - 2),
-                     y_m = (idx[0] > 0), y_p = (idx[0] < ndy - 2);
+                       const bool x_m = (idx[1] > 0), x_p = (idx[1] < ndx - 2),
+                                  y_m = (idx[0] > 0), y_p = (idx[0] < ndy - 2);
 
-          ptr_out[idx] = ptr_matrix[mat_idx] * ptr_in[idx];
-          if (x_m)
-            ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 1, 0, 0)] *
-                            ptr_in[offset_idx(idx, 0, -1)];
-          if (x_p)
-            ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 1, 0, 1)] *
-                            ptr_in[offset_idx(idx, 0, 1)];
-          if (y_m)
-            ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 2, 0, 0)] *
-                            ptr_in[offset_idx(idx, -1, 0)];
-          if (y_p)
-            ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 2, 1, 0)] *
-                            ptr_in[offset_idx(idx, 1, 0)];
+                       T out = ptr_matrix[mat_idx] * ptr_in[idx];
+                       if (x_m)
+                         out += ptr_matrix[offset_idx(mat_idx, 1, 0, 0)] *
+                                ptr_in[offset_idx(idx, 0, -1)];
+                       if (x_p)
+                         out += ptr_matrix[offset_idx(mat_idx, 1, 0, 1)] *
+                                ptr_in[offset_idx(idx, 0, 1)];
+                       if (y_m)
+                         out += ptr_matrix[offset_idx(mat_idx, 2, 0, 0)] *
+                                ptr_in[offset_idx(idx, -1, 0)];
+                       if (y_p)
+                         out += ptr_matrix[offset_idx(mat_idx, 2, 1, 0)] *
+                                ptr_in[offset_idx(idx, 1, 0)];
 
-          if (x_m && y_m)
-            ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 3, 0, 0)] *
-                            ptr_in[offset_idx(idx, -1, -1)];
-          if (x_p && y_p)
-            ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 3, 1, 1)] *
-                            ptr_in[offset_idx(idx, 1, 1)];
+                       if (x_m && y_m)
+                         out += ptr_matrix[offset_idx(mat_idx, 3, 0, 0)] *
+                                ptr_in[offset_idx(idx, -1, -1)];
+                       if (x_p && y_p)
+                         out += ptr_matrix[offset_idx(mat_idx, 3, 1, 1)] *
+                                ptr_in[offset_idx(idx, 1, 1)];
 
-          if (x_m && y_p)
-            ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 4, 0, 0)] *
-                            ptr_in[offset_idx(idx, -1, 1)];
-          if (x_p && y_m)
-            ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 4, 1, -1)] *
-                            ptr_in[offset_idx(idx, 1, -1)];
+                       if (x_m && y_p)
+                         out += ptr_matrix[offset_idx(mat_idx, 4, 0, 0)] *
+                                ptr_in[offset_idx(idx, -1, 1)];
+                       if (x_p && y_m)
+                         out += ptr_matrix[offset_idx(mat_idx, 4, 1, -1)] *
+                                ptr_in[offset_idx(idx, 1, -1)];
 
-          ptr_out[idx] += ptr_yv[idx];
-        });
+                       ptr_out[idx] = ptr_f_in[idx] - out;
+                     });
   });
 }
 
@@ -490,7 +505,7 @@ void initRHS(const std::unique_ptr<cl::sycl::queue> &queue,
 
           cl::sycl::id<2> h5idx(idx[1] + 1, idx[0] + 1);
 
-          ptr_rhs[idx] = ptr_heat_source[offset_idx(h5idx, 1, 1)];
+          ptr_rhs[idx] = ptr_heat_source[offset_idx(h5idx, 0, 0)];
 
           if (!x_m)
             ptr_rhs[idx] += (ptr_k[offset_idx(h5idx, -1, 0)] +
@@ -514,10 +529,42 @@ void initRHS(const std::unique_ptr<cl::sycl::queue> &queue,
 
 // Dot product
 
+// Complexity of implementing this without ONEAPI extensions included into the
+// SYCL 2020 provisional spec suggests waiting until they are more widespread
+// for other implementations
 template <typename T>
-void dot_product(const std::unique_ptr<cl::sycl::queue> &queue,
-                 const DeviceConfig &d_config, cl::sycl::buffer<T, 2> &u1,
-                 cl::sycl::buffer<T, 2> &u2, cl::sycl::buffer<T, 1> &f_val) {}
+T dot_product(const std::unique_ptr<cl::sycl::queue> &queue,
+              const DeviceConfig &d_config, cl::sycl::buffer<T, 2> &u1,
+              cl::sycl::buffer<T, 2> &u2) {
+  const size_t wg_size=d_config.wg_size;
+  auto u_range = u1.get_range();
+  cl::sycl::buffer<T, 1> sum_buff(cl::sycl::range<1>(1));
+  // Begin computation
+  queue->submit([&](cl::sycl::handler &cgh) {
+    size_t ndx = u_range[1];
+    size_t ndy = u_range[0];
+    cl::sycl::range<2> l_range(1, std::min(wg_size, ndx));
+    size_t l_ndy = l_range[0];
+    size_t l_ndx = l_range[1];
+    size_t ngy = (ndy%l_ndy==0)?ndy/l_ndy:ndy/l_ndy+1;
+    size_t ngx = (ndx%l_ndx==0)?ndx/l_ndx:ndx/l_ndx+1;
+    cl::sycl::range<2> g_range(ngy*l_ndy, ngx*l_ndx);
+    cl::sycl::nd_range<2> kernel_range(g_range, l_range);
+    auto ptr_u1 = u1.template get_access<cl::sycl::access::mode::read>(cgh);
+    auto ptr_u2 = u2.template get_access<cl::sycl::access::mode::read>(cgh);
+    auto sum = cl::sycl::accessor<T, 0, cl::sycl::access::mode::write, cl::sycl::access::target::global_buffer>(sum_buff, cgh);
+    cgh.parallel_for(
+        kernel_range,
+        cl::sycl::ONEAPI::reduction(sum, 0.0, cl::sycl::ONEAPI::plus<T>()),
+        [=](cl::sycl::nd_item<2> item, auto &sum) {
+          auto idx = item.get_global_id();
+          if (idx[0] < ndy && idx[1] < ndx)
+            sum += ptr_u1[idx] * ptr_u2[idx];
+        });
+  });
+  auto acc_sum = sum_buff.template get_access<cl::sycl::access::mode::read>();
+  return acc_sum[0];
+}
 
 // Algorithms
 
@@ -622,7 +669,8 @@ void do_computation(const Model_Data::ProblemConfig &config,
       if (i == 0 || i == problem.ndy || j == 0 || j == problem.ndx) {
         solution.temperature[arr_ind] = problem.temperature[arr_ind];
       } else {
-        solution.temperature[arr_ind] = 0.0;
+        solution.temperature[arr_ind] = problem.temperature[arr_ind];
+        // solution.temperature[arr_ind] = 0.0;
       }
     }
   }
@@ -638,23 +686,42 @@ void do_computation(const Model_Data::ProblemConfig &config,
     initU(device_queue, sycl_modeldata, u);
     initRHS(device_queue, sycl_modeldata, f);
 
-    // Multigrid setup
-    std::vector<MGLevel<T>> grids;
-    grids.push_back(
-        MGLevel<T>(problem.ndx, problem.ndy, problem.hx, problem.hy));
-    while (grids.back().m_ndx > 2 && grids.back().m_ndy > 2) {
-      grids.push_back(grids.back().coarseLevel());
-    }
+    if (true) {
+      // CG Setup
+      MGLevel<T> mat_data(problem.ndx, problem.ndy, problem.hx, problem.hy);
 
-    // Do necessary init for MG
-    {
+      mat_data.initAfromK(device_queue, sycl_modeldata.k);
+      cl::sycl::buffer<T, 2> resid(
+          cl::sycl::range<2>(sycl_modeldata.ndy - 1, sycl_modeldata.ndx - 1));
+      cl::sycl::buffer<T, 2> f_calc(
+          cl::sycl::range<2>(sycl_modeldata.ndy - 1, sycl_modeldata.ndx - 1));
+
+      mat_data.mult(device_queue, u, f_calc);
+      mat_data.resid(device_queue, u, f, resid);
+
+      // write_buffer("U", u);
+      // write_buffer("F", f);
+      write_buffer("Resid", resid);
+
+      T dot_out = dot_product(device_queue, d_config, resid, resid);
+      std::cout << "Resid normh: " << dot_out * mat_data.m_dx * mat_data.m_dy
+                << std::endl;
+    } else {
+      // Multigrid setup
+      std::vector<MGLevel<T>> grids;
+      grids.push_back(
+          MGLevel<T>(problem.ndx, problem.ndy, problem.hx, problem.hy));
+      while (grids.back().m_ndx > 2 && grids.back().m_ndy > 2) {
+        grids.push_back(grids.back().coarseLevel());
+      }
+
+      // Do necessary init for MG
       auto front_grid = grids.front();
       front_grid.initAfromK(device_queue, sycl_modeldata.k);
 
       // Initialize Coarsened matricies
+      // Solution computation
     }
-
-    // Solution computation
 
     device_queue->wait_and_throw();
   }
