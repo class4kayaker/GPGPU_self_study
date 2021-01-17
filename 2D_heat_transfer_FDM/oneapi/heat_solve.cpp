@@ -143,13 +143,7 @@ template <typename T> struct MGLevel {
   void initAfromK(const std::unique_ptr<cl::sycl::queue> &queue,
                   cl::sycl::buffer<T, 2> &prob_k);
 
-  void setU(const std::unique_ptr<cl::sycl::queue> &queue,
-            cl::sycl::buffer<T, 2> &u_in);
-
   void zeroU(const std::unique_ptr<cl::sycl::queue> &queue);
-
-  void setRHS(const std::unique_ptr<cl::sycl::queue> &queue,
-              cl::sycl::buffer<T, 2> &u_in);
 
   void mult(const std::unique_ptr<cl::sycl::queue> &queue,
             cl::sycl::buffer<T, 2> &in, cl::sycl::buffer<T, 2> &out);
@@ -329,36 +323,6 @@ void MGLevel<T>::resid(const std::unique_ptr<cl::sycl::queue> &queue,
 }
 
 template <typename T>
-void MGLevel<T>::setU(const std::unique_ptr<cl::sycl::queue> &queue,
-                      cl::sycl::buffer<T, 2> &u_in) {
-  queue->submit([&](cl::sycl::handler &cgh) {
-    size_t ndx = m_ndx;
-    size_t ndy = m_ndy;
-    auto ptr_u_in = u_in.template get_access<cl::sycl::access::mode::read>(cgh);
-    auto ptr_u =
-        u.template get_access<cl::sycl::access::mode::discard_write>(cgh);
-    cgh.parallel_for(cl::sycl::range<2>(ndy - 1, ndx - 1),
-                     [=](cl::sycl::id<2> idx) { ptr_u[idx] = ptr_u_in[idx]; });
-  });
-}
-
-template <typename T>
-void MGLevel<T>::setRHS(const std::unique_ptr<cl::sycl::queue> &queue,
-                        cl::sycl::buffer<T, 2> &rhs_in) {
-  queue->submit([&](cl::sycl::handler &cgh) {
-    size_t ndx = m_ndx;
-    size_t ndy = m_ndy;
-    auto ptr_rhs_in =
-        rhs_in.template get_access<cl::sycl::access::mode::read>(cgh);
-    auto ptr_rhs =
-        rhs.template get_access<cl::sycl::access::mode::discard_write>(cgh);
-    cgh.parallel_for(
-        cl::sycl::range<2>(ndy - 1, ndx - 1),
-        [=](cl::sycl::id<2> idx) { ptr_rhs[idx] = ptr_rhs_in[idx]; });
-  });
-}
-
-template <typename T>
 void MGLevel<T>::zeroU(const std::unique_ptr<cl::sycl::queue> &queue) {
   queue->submit([&](cl::sycl::handler &cgh) {
     size_t ndx = m_ndx;
@@ -527,6 +491,27 @@ void initRHS(const std::unique_ptr<cl::sycl::queue> &queue,
   });
 }
 
+template <typename T>
+void writeTemperature(const std::unique_ptr<cl::sycl::queue> &queue,
+           SYCL_ModelData<T> &problem, cl::sycl::buffer<T, 2> &u) {
+  queue->submit([&](cl::sycl::handler &cgh) {
+    size_t ndx = problem.ndx;
+    size_t ndy = problem.ndy;
+    auto ptr_prob_temp =
+        problem.temperature.template get_access<cl::sycl::access::mode::write>(
+            cgh);
+    auto ptr_u =
+        u.template get_access<cl::sycl::access::mode::read>(cgh);
+    cgh.parallel_for(cl::sycl::range<2>(ndy - 1, ndx - 1),
+                     [=](cl::sycl::id<2> idx) {
+                       cl::sycl::id<2> h5idx(idx[1], idx[0]);
+
+                       ptr_prob_temp[offset_idx(h5idx, 1, 1)] = ptr_u[idx];
+                     });
+  });
+}
+
+
 // Dot product
 
 // Complexity of implementing this without ONEAPI extensions included into the
@@ -536,7 +521,7 @@ template <typename T>
 T dot_product(const std::unique_ptr<cl::sycl::queue> &queue,
               const DeviceConfig &d_config, cl::sycl::buffer<T, 2> &u1,
               cl::sycl::buffer<T, 2> &u2) {
-  const size_t wg_size=d_config.wg_size;
+  const size_t wg_size = d_config.wg_size;
   auto u_range = u1.get_range();
   cl::sycl::buffer<T, 1> sum_buff(cl::sycl::range<1>(1));
   // Begin computation
@@ -546,13 +531,15 @@ T dot_product(const std::unique_ptr<cl::sycl::queue> &queue,
     cl::sycl::range<2> l_range(1, std::min(wg_size, ndx));
     size_t l_ndy = l_range[0];
     size_t l_ndx = l_range[1];
-    size_t ngy = (ndy%l_ndy==0)?ndy/l_ndy:ndy/l_ndy+1;
-    size_t ngx = (ndx%l_ndx==0)?ndx/l_ndx:ndx/l_ndx+1;
-    cl::sycl::range<2> g_range(ngy*l_ndy, ngx*l_ndx);
+    size_t ngy = (ndy % l_ndy == 0) ? ndy / l_ndy : ndy / l_ndy + 1;
+    size_t ngx = (ndx % l_ndx == 0) ? ndx / l_ndx : ndx / l_ndx + 1;
+    cl::sycl::range<2> g_range(ngy * l_ndy, ngx * l_ndx);
     cl::sycl::nd_range<2> kernel_range(g_range, l_range);
     auto ptr_u1 = u1.template get_access<cl::sycl::access::mode::read>(cgh);
     auto ptr_u2 = u2.template get_access<cl::sycl::access::mode::read>(cgh);
-    auto sum = cl::sycl::accessor<T, 0, cl::sycl::access::mode::write, cl::sycl::access::target::global_buffer>(sum_buff, cgh);
+    auto sum = cl::sycl::accessor<T, 0, cl::sycl::access::mode::write,
+                                  cl::sycl::access::target::global_buffer>(
+        sum_buff, cgh);
     cgh.parallel_for(
         kernel_range,
         cl::sycl::ONEAPI::reduction(sum, 0.0, cl::sycl::ONEAPI::plus<T>()),
@@ -566,7 +553,98 @@ T dot_product(const std::unique_ptr<cl::sycl::queue> &queue,
   return acc_sum[0];
 }
 
+// In place adjust vector by scalar multiple of other vector
+
+template <typename T>
+void inc_ay(const std::unique_ptr<cl::sycl::queue> &queue,
+            cl::sycl::buffer<T, 2> xv, T scale, cl::sycl::buffer<T, 2> yv) {
+  queue->submit([&](cl::sycl::handler &cgh) {
+    cl::sycl::range<2> xv_range = xv.get_range();
+    T a_mult = scale;
+    auto ptr_xv =
+        xv.template get_access<cl::sycl::access::mode::read_write>(cgh);
+    auto ptr_yv =
+        yv.template get_access<cl::sycl::access::mode::read>(cgh);
+    cgh.parallel_for(xv_range, [=](cl::sycl::id<2> idx) {
+      ptr_xv[idx] += a_mult * ptr_yv[idx];
+    });
+  });
+}
+
+template <typename T>
+void desc_update(const std::unique_ptr<cl::sycl::queue> &queue,
+            cl::sycl::buffer<T, 2> desc, T scale, cl::sycl::buffer<T, 2> resid) {
+  queue->submit([&](cl::sycl::handler &cgh) {
+    cl::sycl::range<2> desc_range = desc.get_range();
+    T a_mult = scale;
+    auto ptr_desc =
+        desc.template get_access<cl::sycl::access::mode::read_write>(cgh);
+    auto ptr_resid =
+        resid.template get_access<cl::sycl::access::mode::read>(cgh);
+    cgh.parallel_for(desc_range, [=](cl::sycl::id<2> idx) {
+      ptr_desc[idx] = ptr_resid[idx] + a_mult * ptr_desc[idx];
+    });
+  });
+}
+
+template <typename T>
+void copy_vec(const std::unique_ptr<cl::sycl::queue> &queue,
+        cl::sycl::buffer<T, 2> v_in, cl::sycl::buffer<T, 2> v_out) {
+  queue->submit([&](cl::sycl::handler &cgh) {
+    cl::sycl::range<2> v_range = v_in.get_range();
+    auto ptr_v_in =
+        v_in.template get_access<cl::sycl::access::mode::read>(cgh);
+    auto ptr_v_out =
+        v_out.template get_access<cl::sycl::access::mode::discard_write>(cgh);
+    cgh.parallel_for(v_range, [=](cl::sycl::id<2> idx) {
+      ptr_v_out[idx] = ptr_v_in[idx];
+    });
+  });
+}
+
 // Algorithms
+template <typename T>
+void basic_CG(const std::unique_ptr<cl::sycl::queue> &queue,
+        const Model_Data::ProblemConfig &config,
+        const DeviceConfig &d_config,
+        MGLevel<T> &data){
+      cl::sycl::buffer<T, 2> resid(data.u.get_range());
+      cl::sycl::buffer<T, 2> descent(data.u.get_range());
+      cl::sycl::buffer<T, 2> Adescent(data.u.get_range());
+
+      data.resid(queue, data.u, data.rhs, resid);
+      T norm_resid = dot_product(queue, d_config, resid, resid), old_norm_resid = norm_resid;
+
+      T normhR = norm_resid*data.m_dx*data.m_dy, origNormhR = normhR;
+
+      copy_vec(queue, resid, descent);
+
+      int itr_cg;
+
+      for(itr_cg=0; normhR > config.epsilon && normhR/origNormhR > config.epsilon && itr_cg<config.mxiters; ++itr_cg){
+          std::cout << "Iteration " << itr_cg << " normhR=" << normhR << std::endl;
+
+          data.mult(queue, descent, Adescent);
+          T alpha = norm_resid/dot_product(queue, d_config, descent, Adescent);
+
+          inc_ay(queue, data.u, alpha, descent);
+          inc_ay(queue, resid, -alpha, Adescent);
+
+          queue->wait_and_throw();
+
+          old_norm_resid = norm_resid;
+          norm_resid = dot_product(queue, d_config, resid, resid);
+          normhR = norm_resid*data.m_dx*data.m_dy;
+
+          if(normhR < config.epsilon)
+              break;
+
+          T beta = norm_resid/old_norm_resid;
+          desc_update(queue, descent, beta, resid);
+      }
+
+      std::cout << "Converged in " << itr_cg << " iters nh resid=" << normhR << std::endl;
+}
 
 // Useful functors
 class CoarsenA {};
@@ -669,8 +747,7 @@ void do_computation(const Model_Data::ProblemConfig &config,
       if (i == 0 || i == problem.ndy || j == 0 || j == problem.ndx) {
         solution.temperature[arr_ind] = problem.temperature[arr_ind];
       } else {
-        solution.temperature[arr_ind] = problem.temperature[arr_ind];
-        // solution.temperature[arr_ind] = 0.0;
+        solution.temperature[arr_ind] = 0.0;
       }
     }
   }
@@ -691,21 +768,13 @@ void do_computation(const Model_Data::ProblemConfig &config,
       MGLevel<T> mat_data(problem.ndx, problem.ndy, problem.hx, problem.hy);
 
       mat_data.initAfromK(device_queue, sycl_modeldata.k);
-      cl::sycl::buffer<T, 2> resid(
-          cl::sycl::range<2>(sycl_modeldata.ndy - 1, sycl_modeldata.ndx - 1));
-      cl::sycl::buffer<T, 2> f_calc(
-          cl::sycl::range<2>(sycl_modeldata.ndy - 1, sycl_modeldata.ndx - 1));
+      copy_vec(device_queue, u, mat_data.u);
+      copy_vec(device_queue, f, mat_data.rhs);
 
-      mat_data.mult(device_queue, u, f_calc);
-      mat_data.resid(device_queue, u, f, resid);
+      basic_CG(device_queue, config, d_config, mat_data);
 
-      // write_buffer("U", u);
-      // write_buffer("F", f);
-      write_buffer("Resid", resid);
+      copy_vec(device_queue, mat_data.u, u);
 
-      T dot_out = dot_product(device_queue, d_config, resid, resid);
-      std::cout << "Resid normh: " << dot_out * mat_data.m_dx * mat_data.m_dy
-                << std::endl;
     } else {
       // Multigrid setup
       std::vector<MGLevel<T>> grids;
@@ -722,6 +791,8 @@ void do_computation(const Model_Data::ProblemConfig &config,
       // Initialize Coarsened matricies
       // Solution computation
     }
+
+    writeTemperature(device_queue, sycl_modeldata, u);
 
     device_queue->wait_and_throw();
   }
