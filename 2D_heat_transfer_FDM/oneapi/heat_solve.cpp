@@ -64,7 +64,39 @@ static inline cl::sycl::id<2> offset_idx(cl::sycl::id<2> i_idx, int ii,
 }
 static inline cl::sycl::id<3> offset_idx(cl::sycl::id<3> i_idx, int ii, int jj,
                                          int kk) {
-  return cl::sycl::id<3>(i_idx[0] + ii, i_idx[1] + jj, i_idx[3] + kk);
+  return cl::sycl::id<3>(i_idx[0] + ii, i_idx[1] + jj, i_idx[2] + kk);
+}
+
+// convenience write fns
+template <typename T>
+void write_buffer(std::string name, cl::sycl::buffer<T, 2> b) {
+  cl::sycl::range<2> r = b.get_range();
+  auto acc_b = b.template get_access<cl::sycl::access::mode::read>();
+  std::cout << name << ":" << std::endl;
+  for (size_t j = 0; j < r[0]; ++j) {
+    for (size_t i = 0; i < r[1]; ++i) {
+      cl::sycl::id<2> idx(j, i);
+      std::cout << acc_b[idx] << " ";
+    }
+    std::cout << std::endl;
+  }
+}
+template <typename T>
+void write_buffer(std::string name, cl::sycl::buffer<T, 3> b) {
+  cl::sycl::range<3> r = b.get_range();
+  auto acc_b = b.template get_access<cl::sycl::access::mode::read>();
+  std::cout << name << ":" << std::endl;
+  for (size_t k = 0; k < r[0]; ++k) {
+    for (size_t j = 0; j < r[1]; ++j) {
+      for (size_t i = 0; i < r[2]; ++i) {
+        cl::sycl::id<3> idx(k, j, i);
+        std::cout << acc_b[idx] << " ";
+      }
+      std::cout << std::endl;
+    }
+    std::cout << std::endl;
+    std::cout << std::endl;
+  }
 }
 
 // Multigrid grid class
@@ -81,6 +113,9 @@ template <typename T> struct MGLevel {
                cl::sycl::buffer<T, 2> &prob_k,
                cl::sycl::buffer<T, 2> &heat_source,
                cl::sycl::buffer<T, 2> temperature);
+
+  void setU(const std::unique_ptr<cl::sycl::queue> &queue,
+            cl::sycl::buffer<T, 2> &prob_temp);
 
   void mult(const std::unique_ptr<cl::sycl::queue> &queue,
             cl::sycl::buffer<T, 2> &in, cl::sycl::buffer<T, 2> &out);
@@ -122,35 +157,32 @@ void MGLevel<T>::initAfromK(
     auto ptr_matrix =
         matrix.template get_access<cl::sycl::access::mode::discard_write>(cgh);
 
-    cl::sycl::range<2> rng(ndy -1, ndx -1);
-    cgh.parallel_for(
-        rng, [=](cl::sycl::id<2> idx) {
-          const T denom_x = 1.0 / (2.0 * dx * dx);
-          const T denom_y = 1.0 / (2.0 * dy * dy);
+    cl::sycl::range<2> rng(ndy - 1, ndx - 1);
+    cgh.parallel_for(rng, [=](cl::sycl::id<2> idx) {
+      const T denom_x = 1.0 / (2.0 * dx * dx);
+      const T denom_y = 1.0 / (2.0 * dy * dy);
 
-          const T k_c = ptr_k[offset_idx(idx, 1, 1)];
-          const T k_xm = ptr_k[offset_idx(idx, 1, 0)];
-          const T k_xp = ptr_k[offset_idx(idx, 1, 2)];
-          const T k_ym = ptr_k[offset_idx(idx, 0, 1)];
-          const T k_yp = ptr_k[offset_idx(idx, 2, 1)];
+      const T k_c = ptr_k[offset_idx(idx, 1, 1)];
+      const T k_xm = ptr_k[offset_idx(idx, 1, 0)];
+      const T k_xp = ptr_k[offset_idx(idx, 1, 2)];
+      const T k_ym = ptr_k[offset_idx(idx, 0, 1)];
+      const T k_yp = ptr_k[offset_idx(idx, 2, 1)];
 
-          cl::sycl::id<3> m_cen_idx(0, idx[1], idx[0]);
-          cl::sycl::id<3> m_x_idx(1, idx[1], idx[0]);
-          cl::sycl::id<3> m_y_idx(2, idx[1], idx[0]);
-          cl::sycl::id<3> m_xpy_idx(3, idx[1], idx[0]);
-          cl::sycl::id<3> m_xmy_idx(4, idx[1], idx[0]);
+      cl::sycl::id<3> m_cen_idx(0, idx[1], idx[0]);
+      cl::sycl::id<3> m_x_idx(1, idx[1], idx[0]);
+      cl::sycl::id<3> m_y_idx(2, idx[1], idx[0]);
+      cl::sycl::id<3> m_xpy_idx(3, idx[1], idx[0]);
+      cl::sycl::id<3> m_xmy_idx(4, idx[1], idx[0]);
 
-          ptr_matrix[m_cen_idx] = (2.0 * k_c + k_xm + k_xp) / denom_x +
-                                  (2.0 * k_c + k_ym + k_yp) / denom_y;
+      ptr_matrix[m_cen_idx] = (2.0 * k_c + k_xm + k_xp) * denom_x +
+                              (2.0 * k_c + k_ym + k_yp) * denom_y;
 
-          ptr_matrix[m_x_idx] =
-              (idx[1] > 0) ? -1.0 * (k_c + k_xm) / denom_x : 0.0;
+      ptr_matrix[m_x_idx] = (idx[1] > 0) ? -1.0 * (k_c + k_xm) * denom_x : 0.0;
 
-          ptr_matrix[m_y_idx] =
-              (idx[0] > 0) ? -1.0 * (k_c + k_ym) / denom_y : 0.0;
-          ptr_matrix[m_xpy_idx] = 0.0;
-          ptr_matrix[m_xmy_idx] = 0.0;
-        });
+      ptr_matrix[m_y_idx] = (idx[0] > 0) ? -1.0 * (k_c + k_ym) * denom_y : 0.0;
+      ptr_matrix[m_xpy_idx] = 0.0;
+      ptr_matrix[m_xmy_idx] = 0.0;
+    });
   });
 }
 
@@ -186,19 +218,19 @@ void MGLevel<T>::initRHS(const std::unique_ptr<cl::sycl::queue> &queue,
           if (!x_m)
             ptr_rhs[idx] += (ptr_k[offset_idx(h5idx, 1, 0)] +
                              ptr_k[offset_idx(h5idx, 1, 1)]) *
-                            ptr_temperature[offset_idx(h5idx, 1, 0)];
+                            denom_x * ptr_temperature[offset_idx(h5idx, 1, 0)];
           if (!x_p)
             ptr_rhs[idx] += (ptr_k[offset_idx(h5idx, 1, 2)] +
                              ptr_k[offset_idx(h5idx, 1, 1)]) *
-                            ptr_temperature[offset_idx(h5idx, 1, 2)];
+                            denom_x * ptr_temperature[offset_idx(h5idx, 1, 2)];
           if (!y_m)
             ptr_rhs[idx] += (ptr_k[offset_idx(h5idx, 0, 1)] +
                              ptr_k[offset_idx(h5idx, 1, 1)]) *
-                            ptr_temperature[offset_idx(h5idx, 0, 1)];
+                            denom_y * ptr_temperature[offset_idx(h5idx, 0, 1)];
           if (!y_p)
             ptr_rhs[idx] += (ptr_k[offset_idx(h5idx, 2, 1)] +
                              ptr_k[offset_idx(h5idx, 1, 1)]) *
-                            ptr_temperature[offset_idx(h5idx, 2, 1)];
+                            denom_y * ptr_temperature[offset_idx(h5idx, 2, 1)];
         });
   });
 }
@@ -207,13 +239,13 @@ template <typename T>
 void MGLevel<T>::mult(const std::unique_ptr<cl::sycl::queue> &queue,
                       cl::sycl::buffer<T, 2> &in, cl::sycl::buffer<T, 2> &out) {
   queue->submit([&](cl::sycl::handler &cgh) {
-    size_t ndx = ndx;
-    size_t ndy = ndy;
+    size_t ndx = m_ndx;
+    size_t ndy = m_ndy;
     auto ptr_in = in.template get_access<cl::sycl::access::mode::read>(cgh);
-    auto ptr_out =
-        out.template get_access<cl::sycl::access::mode::discard_write>(cgh);
     auto ptr_matrix =
         matrix.template get_access<cl::sycl::access::mode::read>(cgh);
+    auto ptr_out =
+        out.template get_access<cl::sycl::access::mode::discard_write>(cgh);
     cgh.parallel_for(
         cl::sycl::range<2>(ndy - 1, ndx - 1), [=](cl::sycl::id<2> idx) {
           cl::sycl::id<3> mat_idx(0, idx[0], idx[1]);
@@ -252,8 +284,105 @@ void MGLevel<T>::mult(const std::unique_ptr<cl::sycl::queue> &queue,
   });
 }
 
+template <typename T>
+void MGLevel<T>::setU(const std::unique_ptr<cl::sycl::queue> &queue,
+                      cl::sycl::buffer<T, 2> &prob_temp) {
+  queue->submit([&](cl::sycl::handler &cgh) {
+    size_t ndx = m_ndx;
+    size_t ndy = m_ndy;
+    auto ptr_prob_temp =
+        prob_temp.template get_access<cl::sycl::access::mode::read>(cgh);
+    auto ptr_u =
+        u.template get_access<cl::sycl::access::mode::discard_write>(cgh);
+    cgh.parallel_for(cl::sycl::range<2>(ndy - 1, ndx - 1),
+                     [=](cl::sycl::id<2> idx) {
+                       cl::sycl::id<2> h5idx(idx[1], idx[0]);
+
+                       ptr_u[idx] = ptr_prob_temp[offset_idx(h5idx, 1, 1)];
+                     });
+  });
+}
+
+template <typename T>
+void interpolateU(const std::unique_ptr<cl::sycl::queue> &queue,
+                  size_t coarse_ndx, size_t coarse_ndy,
+                  cl::sycl::buffer<T, 2> &coarse_u,
+                  cl::sycl::buffer<T, 2> &fine_u) {
+  queue->submit([&](cl::sycl::handler &cgh) {
+    size_t ndx = 2 * coarse_ndx;
+    size_t ndy = 2 * coarse_ndy;
+    auto ptr_coarse_u =
+        coarse_u.template get_access<cl::sycl::access::mode::read>(cgh);
+    auto ptr_fine_u =
+        fine_u.template get_access<cl::sycl::access::mode::discard_write>(cgh);
+    cgh.parallel_for(cl::sycl::range<2>(ndy - 1, ndx - 1),
+                     [=](cl::sycl::id<2> idx) {
+                       size_t i = idx[1], j = idx[0];
+
+                       const bool x_m = (idx[1] > 0), x_p = (idx[1] < ndx - 2),
+                                  y_m = (idx[0] > 0), y_p = (idx[0] < ndy - 2);
+
+                       ptr_fine_u[idx] = 0.0;
+
+                       if (x_m && y_m) {
+                         cl::sycl::id<2> idx_coarse(j / 2, i / 2);
+
+                         ptr_fine_u[idx] += 0.25 * ptr_coarse_u[idx_coarse];
+                       }
+                       if (x_p && y_m) {
+                         cl::sycl::id<2> idx_coarse(j / 2, (i + 1) / 2);
+
+                         ptr_fine_u[idx] += 0.25 * ptr_coarse_u[idx_coarse];
+                       }
+                       if (x_m && y_p) {
+                         cl::sycl::id<2> idx_coarse((j + 1) / 2, i / 2);
+
+                         ptr_fine_u[idx] += 0.25 * ptr_coarse_u[idx_coarse];
+                       }
+                       if (x_p && y_p) {
+                         cl::sycl::id<2> idx_coarse((j + 1) / 2, (i + 1) / 2);
+
+                         ptr_fine_u[idx] += 0.25 * ptr_coarse_u[idx_coarse];
+                       }
+                     });
+  });
+}
+
+template <typename T>
+void fullWeightU(const std::unique_ptr<cl::sycl::queue> &queue,
+                 size_t coarse_ndx, size_t coarse_ndy,
+                 cl::sycl::buffer<T, 2> &fine_u,
+                 cl::sycl::buffer<T, 2> &coarse_u) {
+  queue->submit([&](cl::sycl::handler &cgh) {
+    size_t ndx = coarse_ndx;
+    size_t ndy = coarse_ndy;
+    auto ptr_fine_u =
+        fine_u.template get_access<cl::sycl::access::mode::read>(cgh);
+    auto ptr_coarse_u =
+        coarse_u.template get_access<cl::sycl::access::mode::discard_write>(
+            cgh);
+    cgh.parallel_for(
+        cl::sycl::range<2>(ndy - 1, ndx - 1), [=](cl::sycl::id<2> idx) {
+          size_t i = idx[1], j = idx[0];
+
+          const T fWeightStencil[9] = {0.25 / 4.0, 0.5 / 4.0, 0.25 / 4.0,
+                                       0.5 / 4.0,  1.0 / 4.0, 0.5 / 4.0,
+                                       0.25 / 4.0, 0.5 / 4.0, 0.25 / 4.0};
+
+          cl::sycl::id<2> idx_fine(j * 2, i * 2);
+
+          ptr_coarse_u[idx] = 0.0;
+          for (size_t jj = 0; jj < 3; ++jj) {
+            for (size_t ii = 0; ii < 3; ++ii) {
+              ptr_coarse_u[idx] += fWeightStencil[jj * 3 + ii] *
+                                   ptr_fine_u[offset_idx(idx_fine, jj, ii)];
+            }
+          }
+        });
+  });
+}
+
 // Useful functors
-class RHSFromF {};
 class CoarsenA {};
 class InterpolateU {};
 class FullWeightU {};
@@ -356,7 +485,8 @@ void do_computation(const Model_Data::ProblemConfig &config,
       if (i == 0 || i == problem.ndy || j == 0 || j == problem.ndx) {
         solution.temperature[arr_ind] = problem.temperature[arr_ind];
       } else {
-        solution.temperature[arr_ind] = 0.0;
+        solution.temperature[arr_ind] = problem.temperature[arr_ind];
+        // solution.temperature[arr_ind] = 0.0;
       }
     }
   }
@@ -386,6 +516,15 @@ void do_computation(const Model_Data::ProblemConfig &config,
       auto front_grid = grids.front();
       front_grid.initAfromK(device_queue, prob_k);
       front_grid.initRHS(device_queue, prob_k, prob_heat, prob_temp);
+      cl::sycl::buffer<T, 2> mult_rhs(
+          cl::sycl::range<2>(front_grid.m_ndy - 1, front_grid.m_ndx - 1));
+      front_grid.setU(device_queue, prob_temp);
+      front_grid.mult(device_queue, front_grid.u, mult_rhs);
+
+      write_buffer("A", front_grid.matrix);
+      write_buffer("U", front_grid.u);
+      write_buffer("Mult RHS", mult_rhs);
+      write_buffer("P RHS", front_grid.rhs);
     }
 
     // Solution computation
