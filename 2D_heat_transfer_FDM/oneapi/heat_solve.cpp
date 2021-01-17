@@ -118,8 +118,7 @@ SYCL_ModelData<T>::SYCL_ModelData(Model_Data::ModelState<T> &state)
       heat_source(state.heat_source.data(),
                   cl::sycl::range<2>(ndx + 1, ndy + 1)),
       temperature(state.temperature.data(),
-                  cl::sycl::range<2>(ndx + 1, ndy + 1)) {
-}
+                  cl::sycl::range<2>(ndx + 1, ndy + 1)) {}
 
 // Multigrid grid class
 
@@ -137,10 +136,14 @@ template <typename T> struct MGLevel {
   void zeroU(const std::unique_ptr<cl::sycl::queue> &queue);
 
   void setRHS(const std::unique_ptr<cl::sycl::queue> &queue,
-            cl::sycl::buffer<T, 2> &u_in);
+              cl::sycl::buffer<T, 2> &u_in);
 
   void mult(const std::unique_ptr<cl::sycl::queue> &queue,
             cl::sycl::buffer<T, 2> &in, cl::sycl::buffer<T, 2> &out);
+
+  void mult_py(const std::unique_ptr<cl::sycl::queue> &queue,
+               cl::sycl::buffer<T, 2> &in, sycl::buffer<T, 2> &y,
+               cl::sycl::buffer<T, 2> &out);
 
   // Host data
   const size_t m_ndx, m_ndy;
@@ -253,6 +256,59 @@ void MGLevel<T>::mult(const std::unique_ptr<cl::sycl::queue> &queue,
           if (x_p && y_m)
             ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 4, 1, -1)] *
                             ptr_in[offset_idx(idx, 1, -1)];
+        });
+  });
+}
+
+template <typename T>
+void MGLevel<T>::mult_py(const std::unique_ptr<cl::sycl::queue> &queue,
+                         cl::sycl::buffer<T, 2> &in, sycl::buffer<T, 2> &yv,
+                         cl::sycl::buffer<T, 2> &out) {
+  queue->submit([&](cl::sycl::handler &cgh) {
+    size_t ndx = m_ndx;
+    size_t ndy = m_ndy;
+    auto ptr_in = in.template get_access<cl::sycl::access::mode::read>(cgh);
+    auto ptr_yv = yv.template get_access<cl::sycl::access::mode::read>(cgh);
+    auto ptr_matrix =
+        matrix.template get_access<cl::sycl::access::mode::read>(cgh);
+    auto ptr_out =
+        out.template get_access<cl::sycl::access::mode::discard_write>(cgh);
+    cgh.parallel_for(
+        cl::sycl::range<2>(ndy - 1, ndx - 1), [=](cl::sycl::id<2> idx) {
+          cl::sycl::id<3> mat_idx(0, idx[0], idx[1]);
+
+          const bool x_m = (idx[1] > 0), x_p = (idx[1] < ndx - 2),
+                     y_m = (idx[0] > 0), y_p = (idx[0] < ndy - 2);
+
+          ptr_out[idx] = ptr_matrix[mat_idx] * ptr_in[idx];
+          if (x_m)
+            ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 1, 0, 0)] *
+                            ptr_in[offset_idx(idx, 0, -1)];
+          if (x_p)
+            ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 1, 0, 1)] *
+                            ptr_in[offset_idx(idx, 0, 1)];
+          if (y_m)
+            ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 2, 0, 0)] *
+                            ptr_in[offset_idx(idx, -1, 0)];
+          if (y_p)
+            ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 2, 1, 0)] *
+                            ptr_in[offset_idx(idx, 1, 0)];
+
+          if (x_m && y_m)
+            ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 3, 0, 0)] *
+                            ptr_in[offset_idx(idx, -1, -1)];
+          if (x_p && y_p)
+            ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 3, 1, 1)] *
+                            ptr_in[offset_idx(idx, 1, 1)];
+
+          if (x_m && y_p)
+            ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 4, 0, 0)] *
+                            ptr_in[offset_idx(idx, -1, 1)];
+          if (x_p && y_m)
+            ptr_out[idx] += ptr_matrix[offset_idx(mat_idx, 4, 1, -1)] *
+                            ptr_in[offset_idx(idx, 1, -1)];
+
+          ptr_out[idx] += ptr_yv[idx];
         });
   });
 }
@@ -463,6 +519,8 @@ void dot_product(const std::unique_ptr<cl::sycl::queue> &queue,
                  const DeviceConfig &d_config, cl::sycl::buffer<T, 2> &u1,
                  cl::sycl::buffer<T, 2> &u2, cl::sycl::buffer<T, 1> &f_val) {}
 
+// Algorithms
+
 // Useful functors
 class CoarsenA {};
 class SmoothWJ {};
@@ -572,8 +630,10 @@ void do_computation(const Model_Data::ProblemConfig &config,
   {
     // Base data buffers
     SYCL_ModelData<T> sycl_modeldata(solution);
-    cl::sycl::buffer<T, 2> u(cl::sycl::range<2>(sycl_modeldata.ndy-1, sycl_modeldata.ndx-1));
-    cl::sycl::buffer<T, 2> f(cl::sycl::range<2>(sycl_modeldata.ndy-1, sycl_modeldata.ndx-1));
+    cl::sycl::buffer<T, 2> u(
+        cl::sycl::range<2>(sycl_modeldata.ndy - 1, sycl_modeldata.ndx - 1));
+    cl::sycl::buffer<T, 2> f(
+        cl::sycl::range<2>(sycl_modeldata.ndy - 1, sycl_modeldata.ndx - 1));
 
     initU(device_queue, sycl_modeldata, u);
     initRHS(device_queue, sycl_modeldata, f);
@@ -585,7 +645,6 @@ void do_computation(const Model_Data::ProblemConfig &config,
     while (grids.back().m_ndx > 2 && grids.back().m_ndy > 2) {
       grids.push_back(grids.back().coarseLevel());
     }
-
 
     // Do necessary init for MG
     {
