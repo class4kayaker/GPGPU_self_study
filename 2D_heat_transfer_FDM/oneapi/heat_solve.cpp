@@ -517,6 +517,9 @@ void writeTemperature(const std::unique_ptr<cl::sycl::queue> &queue,
 // Complexity of implementing this without ONEAPI extensions included into the
 // SYCL 2020 provisional spec suggests waiting until they are more widespread
 // for other implementations
+//
+// Note this also may be the location of a release compile seg-fault which may
+// be in the reduction extension
 template <typename T>
 T dot_product(const std::unique_ptr<cl::sycl::queue> &queue,
               const DeviceConfig &d_config, cl::sycl::buffer<T, 2> &u1,
