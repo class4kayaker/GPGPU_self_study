@@ -14,6 +14,8 @@ def diff_output(args):
     state2 = FDM_State.from_h5(args.file2)
     diff = FDM_Diff(state1, state2)
     print(diff.pprint_string())
+    if(args.diff_state):
+        diff.diff_state().to_h5(args.diff_state)
 
 
 def parse_args(args):
@@ -61,6 +63,13 @@ def parse_args(args):
     diff_parser.add_argument("file1", help="File 1")
 
     diff_parser.add_argument("file2", help="File 2")
+
+    diff_parser.add_argument(
+        "--diff_state",
+        "-o",
+        default="",
+        help="Output File",
+    )
 
     diff_parser.set_defaults(utilcall=diff_output)
 
