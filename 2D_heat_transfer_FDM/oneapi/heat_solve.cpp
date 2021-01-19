@@ -3,6 +3,8 @@
 #include <cstring>
 #include <sys/time.h>
 
+#include <math.h>
+
 #include <CL/sycl.hpp>
 #include <vector>
 
@@ -50,7 +52,7 @@ int main(int argc, char *argv[]) {
       1.0e3;
 
   // Print results (problem size, time and bandwidth in GB/s).
-  std::cout << "TIme for computation " << time << " sec" << std::endl;
+  std::cout << "Time for computation " << time << " sec" << std::endl;
 
   Model_IO::write_vis_metadata(std::string("output.xmf"),
                                std::string(config.hdf5_output_filename),
@@ -143,6 +145,9 @@ template <typename T> struct MGLevel {
   void initAfromK(const std::unique_ptr<cl::sycl::queue> &queue,
                   cl::sycl::buffer<T, 2> &prob_k);
 
+  void initAfromFineA(const std::unique_ptr<cl::sycl::queue> &queue,
+                      MGLevel<T> &fineLevel);
+
   void zeroU(const std::unique_ptr<cl::sycl::queue> &queue);
 
   void mult(const std::unique_ptr<cl::sycl::queue> &queue,
@@ -151,6 +156,8 @@ template <typename T> struct MGLevel {
   void resid(const std::unique_ptr<cl::sycl::queue> &queue,
              cl::sycl::buffer<T, 2> &u_in, sycl::buffer<T, 2> &f_in,
              cl::sycl::buffer<T, 2> &out);
+
+  void wjacobi(const std::unique_ptr<cl::sycl::queue> &queue, T weight);
 
   // Host data
   const size_t m_ndx, m_ndy;
@@ -217,6 +224,11 @@ void MGLevel<T>::initAfromK(
     });
   });
 }
+
+template <typename T>
+void MGLevel<T>::initAfromFineA(
+    const std::unique_ptr<cl::sycl::queue> &device_queue,
+    MGLevel<T> &fineLevel) {}
 
 template <typename T>
 void MGLevel<T>::mult(const std::unique_ptr<cl::sycl::queue> &queue,
@@ -334,6 +346,30 @@ void MGLevel<T>::zeroU(const std::unique_ptr<cl::sycl::queue> &queue) {
                        cl::sycl::id<2> h5idx(idx[1], idx[0]);
 
                        ptr_u[idx] = 0.0;
+                     });
+  });
+}
+
+template <typename T>
+void MGLevel<T>::wjacobi(const std::unique_ptr<cl::sycl::queue> &queue,
+                         T weight) {
+  cl::sycl::buffer<2> tmp_mult(u.get_range());
+  mult(queue, u, tmp_mult) queue->submit([&](cl::sycl::handler &cgh) {
+    T wj_weight;
+    size_t ndx = m_ndx;
+    size_t ndy = m_ndy;
+    auto ptr_matrix =
+        matrix.template get_access<cl::sycl::access::mode::read>(cgh);
+    auto ptr_rhs = rhs.template get_access<cl::sycl::access::mode::read>(cgh);
+    auto ptr_Au =
+        tmp_mult.template get_access<cl::sycl::access::mode::read>(cgh);
+    auto ptr_u = u.template get_access<cl::sycl::access::mode::read_write>(cgh);
+    cgh.parallel_for(cl::sycl::range<2>(ndy - 1, ndx - 1),
+                     [=](cl::sycl::id<2> idx) {
+                       cl::sycl::id<2> mat_diag_idx(0, idx[0], idx[1]);
+                       ptr_u[idx] = (1.0 - wj_weight) * ptr_u[idx] +
+                                    wj_weight * (ptr_rhs[idx] - ptr_Au[idx]) /
+                                        matrix[mat_diag_idx];
                      });
   });
 }
@@ -493,15 +529,14 @@ void initRHS(const std::unique_ptr<cl::sycl::queue> &queue,
 
 template <typename T>
 void writeTemperature(const std::unique_ptr<cl::sycl::queue> &queue,
-           SYCL_ModelData<T> &problem, cl::sycl::buffer<T, 2> &u) {
+                      SYCL_ModelData<T> &problem, cl::sycl::buffer<T, 2> &u) {
   queue->submit([&](cl::sycl::handler &cgh) {
     size_t ndx = problem.ndx;
     size_t ndy = problem.ndy;
     auto ptr_prob_temp =
         problem.temperature.template get_access<cl::sycl::access::mode::write>(
             cgh);
-    auto ptr_u =
-        u.template get_access<cl::sycl::access::mode::read>(cgh);
+    auto ptr_u = u.template get_access<cl::sycl::access::mode::read>(cgh);
     cgh.parallel_for(cl::sycl::range<2>(ndy - 1, ndx - 1),
                      [=](cl::sycl::id<2> idx) {
                        cl::sycl::id<2> h5idx(idx[1], idx[0]);
@@ -510,7 +545,6 @@ void writeTemperature(const std::unique_ptr<cl::sycl::queue> &queue,
                      });
   });
 }
-
 
 // Dot product
 
@@ -566,8 +600,7 @@ void inc_ay(const std::unique_ptr<cl::sycl::queue> &queue,
     T a_mult = scale;
     auto ptr_xv =
         xv.template get_access<cl::sycl::access::mode::read_write>(cgh);
-    auto ptr_yv =
-        yv.template get_access<cl::sycl::access::mode::read>(cgh);
+    auto ptr_yv = yv.template get_access<cl::sycl::access::mode::read>(cgh);
     cgh.parallel_for(xv_range, [=](cl::sycl::id<2> idx) {
       ptr_xv[idx] += a_mult * ptr_yv[idx];
     });
@@ -576,7 +609,8 @@ void inc_ay(const std::unique_ptr<cl::sycl::queue> &queue,
 
 template <typename T>
 void desc_update(const std::unique_ptr<cl::sycl::queue> &queue,
-            cl::sycl::buffer<T, 2> desc, T scale, cl::sycl::buffer<T, 2> resid) {
+                 cl::sycl::buffer<T, 2> desc, T scale,
+                 cl::sycl::buffer<T, 2> resid) {
   queue->submit([&](cl::sycl::handler &cgh) {
     cl::sycl::range<2> desc_range = desc.get_range();
     T a_mult = scale;
@@ -592,65 +626,67 @@ void desc_update(const std::unique_ptr<cl::sycl::queue> &queue,
 
 template <typename T>
 void copy_vec(const std::unique_ptr<cl::sycl::queue> &queue,
-        cl::sycl::buffer<T, 2> v_in, cl::sycl::buffer<T, 2> v_out) {
+              cl::sycl::buffer<T, 2> v_in, cl::sycl::buffer<T, 2> v_out) {
   queue->submit([&](cl::sycl::handler &cgh) {
     cl::sycl::range<2> v_range = v_in.get_range();
-    auto ptr_v_in =
-        v_in.template get_access<cl::sycl::access::mode::read>(cgh);
+    auto ptr_v_in = v_in.template get_access<cl::sycl::access::mode::read>(cgh);
     auto ptr_v_out =
         v_out.template get_access<cl::sycl::access::mode::discard_write>(cgh);
-    cgh.parallel_for(v_range, [=](cl::sycl::id<2> idx) {
-      ptr_v_out[idx] = ptr_v_in[idx];
-    });
+    cgh.parallel_for(
+        v_range, [=](cl::sycl::id<2> idx) { ptr_v_out[idx] = ptr_v_in[idx]; });
   });
 }
 
 // Algorithms
 template <typename T>
 void basic_CG(const std::unique_ptr<cl::sycl::queue> &queue,
-        const Model_Data::ProblemConfig &config,
-        const DeviceConfig &d_config,
-        MGLevel<T> &data){
-      cl::sycl::buffer<T, 2> resid(data.u.get_range());
-      cl::sycl::buffer<T, 2> descent(data.u.get_range());
-      cl::sycl::buffer<T, 2> Adescent(data.u.get_range());
+              const Model_Data::ProblemConfig &config,
+              const DeviceConfig &d_config, MGLevel<T> &data) {
+  cl::sycl::buffer<T, 2> resid(data.u.get_range());
+  cl::sycl::buffer<T, 2> descent(data.u.get_range());
+  cl::sycl::buffer<T, 2> Adescent(data.u.get_range());
 
-      data.resid(queue, data.u, data.rhs, resid);
-      T norm_resid = dot_product(queue, d_config, resid, resid), old_norm_resid = norm_resid;
+  data.resid(queue, data.u, data.rhs, resid);
+  T norm_resid = dot_product(queue, d_config, resid, resid),
+    old_norm_resid = norm_resid;
 
-      T normhR = norm_resid*data.m_dx*data.m_dy, origNormhR = normhR;
+  T normhR = sqrt(norm_resid * data.m_dx * data.m_dy), origNormhR = normhR;
 
-      copy_vec(queue, resid, descent);
+  copy_vec(queue, resid, descent);
 
-      queue->wait_and_throw();
+  queue->wait_and_throw();
 
-      int itr_cg;
+  int itr_cg;
 
-      for(itr_cg=0; normhR > config.epsilon && normhR/origNormhR > config.epsilon && itr_cg<config.mxiters; ++itr_cg){
-          std::cout << "Iteration " << itr_cg << " normhR=" << normhR << std::endl;
+  for (itr_cg = 0;
+       normhR > config.epsilon && normhR / origNormhR > config.epsilon &&
+       itr_cg < config.mxiters;
+       ++itr_cg) {
+    std::cout << "Iteration " << itr_cg << " normhR=" << normhR << std::endl;
 
-          data.mult(queue, descent, Adescent);
-          T alpha = norm_resid/dot_product(queue, d_config, descent, Adescent);
-          
-          queue->wait_and_throw();
+    data.mult(queue, descent, Adescent);
+    T alpha = norm_resid / dot_product(queue, d_config, descent, Adescent);
 
-          inc_ay(queue, data.u, alpha, descent);
-          inc_ay(queue, resid, -alpha, Adescent);
+    queue->wait_and_throw();
 
-          old_norm_resid = norm_resid;
-          norm_resid = dot_product(queue, d_config, resid, resid);
-          normhR = norm_resid*data.m_dx*data.m_dy;
+    inc_ay(queue, data.u, alpha, descent);
+    inc_ay(queue, resid, -alpha, Adescent);
 
-          queue->wait_and_throw();
+    old_norm_resid = norm_resid;
+    norm_resid = dot_product(queue, d_config, resid, resid);
+    normhR = sqrt(norm_resid * data.m_dx * data.m_dy);
 
-          if(normhR < config.epsilon)
-              break;
+    queue->wait_and_throw();
 
-          T beta = norm_resid/old_norm_resid;
-          desc_update(queue, descent, beta, resid);
-      }
+    if (normhR < config.epsilon)
+      break;
 
-      std::cout << "Converged in " << itr_cg << " iters nh resid=" << normhR << std::endl;
+    T beta = norm_resid / old_norm_resid;
+    desc_update(queue, descent, beta, resid);
+  }
+
+  std::cout << "Converged in " << itr_cg << " iters nh resid=" << normhR
+            << std::endl;
 }
 
 // Useful functors
