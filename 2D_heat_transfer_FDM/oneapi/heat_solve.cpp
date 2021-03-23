@@ -228,7 +228,18 @@ void MGLevel<T>::initAfromK(
 template <typename T>
 void MGLevel<T>::initAfromFineA(
     const std::unique_ptr<cl::sycl::queue> &device_queue,
-    MGLevel<T> &fineLevel) {}
+    MGLevel<T> &fineLevel) {
+  cl::sycl::buffer<2> tmp_input(fineLevel.u.get_range());
+  cl::sycl::buffer<2> tmp_mult(fineLevel.u.get_range());
+    for (int ioff=0; ioff<3; ++ioff){
+        for(int joff=0; joff<3; ++joff){
+            // Initialize to interpolated values on appropriate points
+            // Multi
+            fineLevel.mult(tmp_input, tmp_mult);
+            // Set matrix values based on full weighting
+        }
+    }
+}
 
 template <typename T>
 void MGLevel<T>::mult(const std::unique_ptr<cl::sycl::queue> &queue,
@@ -354,7 +365,8 @@ template <typename T>
 void MGLevel<T>::wjacobi(const std::unique_ptr<cl::sycl::queue> &queue,
                          T weight) {
   cl::sycl::buffer<2> tmp_mult(u.get_range());
-  mult(queue, u, tmp_mult) queue->submit([&](cl::sycl::handler &cgh) {
+  mult(queue, u, tmp_mult);
+  queue->submit([&](cl::sycl::handler &cgh) {
     T wj_weight;
     size_t ndx = m_ndx;
     size_t ndy = m_ndy;
